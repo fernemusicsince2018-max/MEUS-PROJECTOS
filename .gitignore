@@ -1,0 +1,7 @@
+node_modules
+dist
+.env
+.env.local
+.netlify
+playwright-report
+test-results

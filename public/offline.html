@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1b1c48" />
+    <title>Sem ligacao | KASTROZAPP</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: "Segoe UI", sans-serif;
+        --bg: #eef4ec;
+        --card: rgba(255, 255, 255, 0.92);
+        --text: #10231f;
+        --muted: #61756f;
+        --accent: #25ae82;
+        --dark: #1b1c48;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px 18px;
+        background:
+          radial-gradient(circle at top left, rgba(37, 174, 130, 0.12), transparent 24%),
+          radial-gradient(circle at bottom right, rgba(255, 198, 26, 0.18), transparent 20%),
+          linear-gradient(180deg, #fbfdf9 0%, var(--bg) 100%);
+        color: var(--text);
+      }
+
+      main {
+        width: 100%;
+        max-width: 560px;
+        padding: 28px 24px;
+        border-radius: 32px;
+        background: var(--card);
+        border: 1px solid rgba(104, 128, 120, 0.16);
+        box-shadow: 0 24px 64px rgba(12, 37, 34, 0.1);
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(12, 37, 34, 0.06);
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 20px 0 12px;
+        font-size: clamp(30px, 7vw, 40px);
+        line-height: 1.05;
+      }
+
+      p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.7;
+        font-size: 14px;
+      }
+
+      .hint {
+        margin-top: 18px;
+        padding: 16px 18px;
+        border-radius: 22px;
+        background: var(--bg);
+        border: 1px solid rgba(104, 128, 120, 0.16);
+      }
+
+      .actions {
+        margin-top: 18px;
+      }
+
+      button {
+        border: none;
+        border-radius: 16px;
+        padding: 12px 18px;
+        font: inherit;
+        font-weight: 800;
+        cursor: pointer;
+        color: white;
+        background: linear-gradient(135deg, var(--dark) 0%, var(--accent) 100%);
+        box-shadow: 0 16px 34px rgba(12, 37, 34, 0.18);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="badge">Modo offline</div>
+      <h1>Sem ligacao para abrir esta area.</h1>
+      <p>
+        A aplicacao tentou carregar esta rota sem internet e ainda nao encontrou uma copia local suficiente
+        para a abrir completamente.
+      </p>
+      <div class="hint">
+        Volta a tentar quando a ligacao estiver estavel. Depois da primeira visita com internet, esta area fica
+        mais preparada para reabrir offline.
+      </div>
+      <div class="actions">
+        <button type="button" onclick="window.location.reload()">Tentar novamente</button>
+      </div>
+    </main>
+  </body>
+</html>

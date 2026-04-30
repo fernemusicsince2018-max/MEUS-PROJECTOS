@@ -1,0 +1,276 @@
+# Exemplo de App Spec para DigitalOcean App Platform + Managed PostgreSQL.
+# Antes de aplicar:
+# 1. troca owner/repo, branch e dominio;
+# 2. cria o cluster PostgreSQL gerido;
+# 3. cria um pool chamado `catalog-pool`;
+# 4. ajusta emails, branding e segredos.
+
+name: kastrozap-prod
+region: fra
+
+alerts:
+  - rule: DEPLOYMENT_FAILED
+
+services:
+  - name: web
+    environment_slug: node-js
+    github:
+      repo: teu-user/teu-repo
+      branch: main
+      deploy_on_push: true
+    source_dir: /
+    build_command: npm install && npm run build
+    run_command: npm start
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-1gb
+    health_check:
+      initial_delay_seconds: 20
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 5
+      http_path: /health
+      port: 8080
+    liveness_health_check:
+      initial_delay_seconds: 30
+      period_seconds: 15
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 5
+      http_path: /health
+      port: 8080
+    envs:
+      - key: NODE_ENV
+        value: production
+        scope: RUN_TIME
+        type: GENERAL
+
+jobs:
+  - name: notifications-dispatch
+    kind: SCHEDULED
+    environment_slug: node-js
+    github:
+      repo: teu-user/teu-repo
+      branch: main
+      deploy_on_push: true
+    source_dir: /
+    build_command: npm install
+    run_command: npm run notifications:dispatch
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    schedule:
+      cron: "* * * * *"
+      time_zone: Africa/Lagos
+    envs:
+      - key: NODE_ENV
+        value: production
+        scope: RUN_TIME
+        type: GENERAL
+
+databases:
+  - name: catalog-db
+    engine: PG
+    version: "17"
+    production: true
+    cluster_name: teu-cluster-postgres
+    db_name: catalogo_prod
+    db_user: catalogo_app
+
+envs:
+  - key: APP_BASE_URL
+    value: https://catalogo.teu-dominio.com
+    scope: RUN_TIME
+    type: GENERAL
+  - key: VITE_CATALOG_API_BASE
+    value: /api
+    scope: RUN_AND_BUILD_TIME
+    type: GENERAL
+  - key: VITE_NATIVE_CATALOG_API_BASE
+    value: https://catalogo.teu-dominio.com/api
+    scope: RUN_AND_BUILD_TIME
+    type: GENERAL
+  - key: VITE_PUBLIC_CATALOG_BASE_URL
+    value: https://catalogo.teu-dominio.com
+    scope: RUN_AND_BUILD_TIME
+    type: GENERAL
+  - key: VITE_PUBLIC_CATALOG_BASE_DOMAIN
+    value: teu-dominio.com
+    scope: RUN_AND_BUILD_TIME
+    type: GENERAL
+  - key: VITE_ALLOW_LOCAL_FALLBACK
+    value: "false"
+    scope: RUN_AND_BUILD_TIME
+    type: GENERAL
+  - key: CORS_ALLOWED_ORIGINS
+    value: capacitor://localhost,http://localhost,https://*.teu-dominio.com
+    scope: RUN_TIME
+    type: GENERAL
+  - key: SESSION_COOKIE_SAME_SITE
+    value: None
+    scope: RUN_TIME
+    type: GENERAL
+  - key: SESSION_COOKIE_SECURE
+    value: "true"
+    scope: RUN_TIME
+    type: GENERAL
+  - key: SUPER_ADMIN_EMAILS
+    value: admin@teu-dominio.com
+    scope: RUN_TIME
+    type: GENERAL
+  - key: DATABASE_URL
+    value: ${catalog-db.DATABASE_URL}
+    scope: RUN_TIME
+    type: GENERAL
+  - key: POSTGRES_POOLER_URL
+    value: ${catalog-db.catalog-pool.DATABASE_URL}
+    scope: RUN_TIME
+    type: GENERAL
+  - key: POSTGRES_USE_POOLER
+    value: "true"
+    scope: RUN_TIME
+    type: GENERAL
+  - key: POSTGRES_POOL_MAX
+    value: "3"
+    scope: RUN_TIME
+    type: GENERAL
+  - key: POSTGRES_IDLE_TIMEOUT_MS
+    value: "10000"
+    scope: RUN_TIME
+    type: GENERAL
+  - key: POSTGRES_CONNECTION_TIMEOUT_MS
+    value: "10000"
+    scope: RUN_TIME
+    type: GENERAL
+  - key: POSTGRES_QUERY_TIMEOUT_MS
+    value: "0"
+    scope: RUN_TIME
+    type: GENERAL
+  - key: POSTGRES_STATEMENT_TIMEOUT_MS
+    value: "0"
+    scope: RUN_TIME
+    type: GENERAL
+  - key: POSTGRES_POOL_MAX_USES
+    value: "0"
+    scope: RUN_TIME
+    type: GENERAL
+  - key: POSTGRES_KEEPALIVE
+    value: "true"
+    scope: RUN_TIME
+    type: GENERAL
+  - key: POSTGRES_KEEPALIVE_INITIAL_DELAY_MS
+    value: "0"
+    scope: RUN_TIME
+    type: GENERAL
+  - key: POSTGRES_ALLOW_EXIT_ON_IDLE
+    value: "false"
+    scope: RUN_TIME
+    type: GENERAL
+  - key: POSTGRES_APPLICATION_NAME
+    value: kastrozap-production
+    scope: RUN_TIME
+    type: GENERAL
+  - key: SYSTEM_SETTINGS_CACHE_TTL_MS
+    value: "10000"
+    scope: RUN_TIME
+    type: GENERAL
+  - key: PUBLIC_CATALOG_CACHE_TTL_MS
+    value: "45000"
+    scope: RUN_TIME
+    type: GENERAL
+  - key: PUBLIC_CATALOG_CACHE_STALE_WHILE_REVALIDATE_SECONDS
+    value: "180"
+    scope: RUN_TIME
+    type: GENERAL
+  - key: PASSWORD_RESET_FROM_NAME
+    value: KASTROZAPP
+    scope: RUN_TIME
+    type: GENERAL
+  - key: PASSWORD_RESET_FROM_EMAIL
+    value: no-reply@teu-dominio.com
+    scope: RUN_TIME
+    type: GENERAL
+  - key: PASSWORD_RESET_REPLY_TO
+    value: suporte@teu-dominio.com
+    scope: RUN_TIME
+    type: GENERAL
+  - key: CATALOG_EXPOSE_RESET_CODE
+    value: "false"
+    scope: RUN_TIME
+    type: GENERAL
+  - key: RESEND_API_KEY
+    value: re_prod_substitui_isto
+    scope: RUN_TIME
+    type: SECRET
+  - key: WHATSAPP_CLOUD_API_TOKEN
+    value: EAAGprod_substitui_isto
+    scope: RUN_TIME
+    type: SECRET
+  - key: WHATSAPP_CLOUD_PHONE_NUMBER_ID
+    value: "123456789012345"
+    scope: RUN_TIME
+    type: GENERAL
+  - key: WHATSAPP_CLOUD_API_VERSION
+    value: v23.0
+    scope: RUN_TIME
+    type: GENERAL
+  - key: WHATSAPP_CLOUD_TEMPLATE_LANGUAGE
+    value: pt_PT
+    scope: RUN_TIME
+    type: GENERAL
+  - key: WHATSAPP_CLOUD_ORDER_SUMMARY_TEMPLATE_NAME
+    value: catalog_order_summary_v1
+    scope: RUN_TIME
+    type: GENERAL
+  - key: WHATSAPP_CLOUD_ORDER_ITEM_TEMPLATE_NAME
+    value: catalog_order_item_image_v1
+    scope: RUN_TIME
+    type: GENERAL
+  - key: NOTIFICATION_DISPATCH_SECRET
+    value: substitui-por-um-segredo-forte
+    scope: RUN_TIME
+    type: SECRET
+  - key: NOTIFICATION_JOB_BATCH_SIZE
+    value: "20"
+    scope: RUN_TIME
+    type: GENERAL
+  - key: SUPABASE_URL
+    value: https://teu-projeto.supabase.co
+    scope: RUN_TIME
+    type: GENERAL
+  - key: SUPABASE_SERVICE_ROLE_KEY
+    value: substitui-por-service-role-key
+    scope: RUN_TIME
+    type: SECRET
+  - key: SUPABASE_STORAGE_BUCKET
+    value: catalog-assets
+    scope: RUN_TIME
+    type: GENERAL
+  - key: VITE_BRAND_NAME
+    value: KASTROZAPP
+    scope: RUN_AND_BUILD_TIME
+    type: GENERAL
+  - key: VITE_BRAND_TAGLINE
+    value: Sua loja no WhatsApp.
+    scope: RUN_AND_BUILD_TIME
+    type: GENERAL
+  - key: VITE_BRAND_ACCENT
+    value: "#25ae82"
+    scope: RUN_AND_BUILD_TIME
+    type: GENERAL
+  - key: VITE_BRAND_DARK
+    value: "#1b1c48"
+    scope: RUN_AND_BUILD_TIME
+    type: GENERAL
+  - key: VITE_BRAND_HIGHLIGHT
+    value: "#ffc61a"
+    scope: RUN_AND_BUILD_TIME
+    type: GENERAL
+  - key: VITE_BRAND_LOGO_URL
+    value: /pwa-icon.svg
+    scope: RUN_AND_BUILD_TIME
+    type: GENERAL
+  - key: VITE_BRAND_INITIALS
+    value: KZ
+    scope: RUN_AND_BUILD_TIME
+    type: GENERAL

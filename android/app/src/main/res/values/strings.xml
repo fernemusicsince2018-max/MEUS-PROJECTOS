@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">KASTROZAPP</string>
+    <string name="title_activity_main">KASTROZAPP</string>
+    <string name="package_name">com.fernagest.catalogo</string>
+    <string name="custom_url_scheme">com.fernagest.catalogo</string>
+</resources>

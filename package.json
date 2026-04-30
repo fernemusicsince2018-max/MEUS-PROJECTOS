@@ -1,0 +1,48 @@
+{
+  "name": "kastrozap",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/dev-local.mjs",
+    "dev:ui": "vite",
+    "dev:api": "node scripts/dev-functions.mjs",
+    "start": "node server.js",
+    "test": "node scripts/run-tests.mjs",
+    "test:smoke": "npm run test && npm run build",
+    "test:e2e": "playwright test",
+    "test:smoke:full": "npm run test:smoke && npm run test:e2e",
+    "build": "vite build",
+    "preview": "vite preview",
+    "native:sync": "npm run build && npx cap sync android",
+    "native:copy": "npm run build && npx cap copy android",
+    "native:android": "npx cap open android",
+    "db:create": "node scripts/db-create.mjs",
+    "db:init": "node scripts/db-init.mjs",
+    "db:check": "node scripts/db-check.mjs",
+    "db:check:schema": "node scripts/db-check-schema.mjs",
+    "db:super-admin": "node scripts/db-super-admin.mjs",
+    "capacity:estimate": "node scripts/capacity-estimate.mjs",
+    "notifications:dispatch": "node scripts/notifications-dispatch.mjs",
+    "readiness": "node scripts/production-readiness.mjs",
+    "verify:integrations": "node scripts/verify-integrations.mjs",
+    "loadtest:seed:staging": "node scripts/seed-staging-synthetic-catalog.mjs",
+    "loadtest:staging": "node scripts/load-test-staging-http.mjs",
+    "loadtest:staging:matrix": "node scripts/load-test-staging-matrix.mjs",
+    "loadtest:staging:targets": "node scripts/load-test-staging-targets.mjs"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.3.1",
+    "@capacitor/cli": "^8.3.1",
+    "@capacitor/core": "^8.3.1",
+    "lucide-react": "latest",
+    "pg": "^8.20.0",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "@vitejs/plugin-react": "latest",
+    "vite": "latest"
+  }
+}

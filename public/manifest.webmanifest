@@ -1,0 +1,26 @@
+{
+  "id": "/app",
+  "name": "KASTROZAPP",
+  "short_name": "KASTROZAPP",
+  "description": "Sua loja no WhatsApp com catalogo digital, pedidos e painel do lojista.",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f4f7f1",
+  "theme_color": "#25ae82",
+  "icons": [
+    {
+      "src": "/pwa-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
