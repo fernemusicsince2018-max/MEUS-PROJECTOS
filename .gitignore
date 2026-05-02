@@ -7,6 +7,7 @@ dist
 !.env.staging.example
 .env.local
 .netlify
+netlify-vars.env.env
 playwright-report
 test-results
 ".github/" 
