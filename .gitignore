@@ -1,6 +1,10 @@
 node_modules
 dist
 .env
+.env.*
+!.env.example
+!.env.production.example
+!.env.staging.example
 .env.local
 .netlify
 playwright-report
