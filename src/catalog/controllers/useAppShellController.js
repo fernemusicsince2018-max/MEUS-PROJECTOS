@@ -340,6 +340,20 @@ export function useAppShellController({
     }
   }
 
+  async function handleCheckRegisterAvailability(payload) {
+    return authService.checkRegisterAvailability(payload);
+  }
+
+  async function handleConfirmRegisterApproval(payload) {
+    setAuthBusy(true);
+
+    try {
+      return await authService.confirmRegisterApproval(payload);
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
   async function handleRequestPasswordReset(payload) {
     setAuthBusy(true);
 
@@ -451,6 +465,8 @@ export function useAppShellController({
       retryCurrentLocation,
       handleLogin,
       handleRegister,
+      handleCheckRegisterAvailability,
+      handleConfirmRegisterApproval,
       handleRequestPasswordReset,
       handleResetPassword,
       handleLogout,

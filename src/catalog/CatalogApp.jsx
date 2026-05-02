@@ -274,6 +274,8 @@ export default function CatalogApp() {
         busy={authBusy}
         onLogin={shellActions.handleLogin}
         onRegister={shellActions.handleRegister}
+        onCheckRegisterAvailability={shellActions.handleCheckRegisterAvailability}
+        onConfirmRegisterApproval={shellActions.handleConfirmRegisterApproval}
         onRequestPasswordReset={shellActions.handleRequestPasswordReset}
         onResetPassword={shellActions.handleResetPassword}
       />,

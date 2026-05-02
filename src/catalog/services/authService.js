@@ -114,10 +114,39 @@ export function createAuthService(config) {
       });
 
       const data = await parseResponse(response, "Nao foi possivel criar a conta.");
+      const syncedAt = data?.authenticated
+        ? writeCachedValue(SESSION_CACHE_KEY, data)
+        : "";
       return {
         ...data,
-        syncedAt: writeCachedValue(SESSION_CACHE_KEY, data),
+        syncedAt,
       };
+    },
+    async checkRegisterAvailability(payload) {
+      ensureBase();
+      const response = await fetch(`${base}/auth-register-availability`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: requestCredentials,
+        body: JSON.stringify(payload),
+      });
+
+      return parseResponse(response, "Nao foi possivel validar os dados do cadastro.");
+    },
+    async confirmRegisterApproval(payload) {
+      ensureBase();
+      const response = await fetch(`${base}/auth-register-approve`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: requestCredentials,
+        body: JSON.stringify(payload),
+      });
+
+      return parseResponse(response, "Nao foi possivel aprovar a loja.");
     },
     async login(payload) {
       ensureBase();

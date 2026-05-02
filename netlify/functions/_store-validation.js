@@ -373,6 +373,7 @@ function normalizeLocalPhone(rule, digits) {
 export function getStoreFieldMeta(country) {
   const rule = getCountryRule(country);
   return {
+    dialCode: rule?.dialCode || "",
     whatsappHint: `${rule?.phoneHint || "Usa um numero valido com DDI ou no formato local do pais."} Tambem podes colar um link direto do WhatsApp, como https://wa.me/244923000000.`,
     whatsappPlaceholder: rule?.phonePlaceholder ? `${rule.phonePlaceholder} ou https://wa.me/${rule.dialCode}${rule.phonePlaceholder.replace(/^0/, "")}` : "Ex: 244923000000 ou https://wa.me/244923000000",
     businessPhoneHint: rule?.phoneHint || "Usa um telefone comercial valido.",

@@ -1,6 +1,8 @@
 import React from "react";
-import { Eye, EyeOff, KeyRound, LockKeyhole, Mail, ShieldCheck, Store } from "lucide-react";
+import { Eye, EyeOff, KeyRound, LockKeyhole, Mail, Phone, ShieldCheck, Store } from "lucide-react";
 import { FIELD_STYLE, PASSWORD_POLICY_HINT, SURFACE_STYLE } from "../../constants.js";
+import { COUNTRY_OPTIONS } from "../../utils/countryRegions.js";
+import { getStoreFieldMeta, validatePhoneForCountry } from "../../utils/storeValidation.js";
 import BrandMark from "../common/BrandMark.jsx";
 import { CollapsiblePanel } from "../common/UiBits.jsx";
 
@@ -23,6 +25,25 @@ const RESET_INITIAL_STATE = {
   confirmPassword: "",
 };
 
+const RESET_SESSION_STORAGE_KEY = "kastrozap-password-reset";
+const APPROVAL_SESSION_STORAGE_KEY = "kastrozap-register-approval";
+
+const EMPTY_REGISTER_FIELD_STATUS = {
+  state: "idle",
+  available: false,
+  message: "",
+};
+
+const DEFAULT_REGISTER_COUNTRY = COUNTRY_OPTIONS[0]?.value || "Angola";
+
+function buildInvalidFieldStatus(message) {
+  return {
+    state: "invalid",
+    available: false,
+    message,
+  };
+}
+
 function readResetParamsFromUrl() {
   if (typeof window === "undefined") return { email: "", token: "" };
   const url = new URL(window.location.href);
@@ -40,37 +61,289 @@ function clearResetParamsFromUrl() {
   window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
-export default function AuthScreen({ brand, busy, onLogin, onRegister, onRequestPasswordReset, onResetPassword }) {
-  const resetParams = React.useMemo(() => readResetParamsFromUrl(), []);
-  const [mode, setMode] = React.useState("login");
+function readResetParamsFromSession() {
+  if (typeof window === "undefined") return { email: "", token: "" };
+
+  try {
+    const rawValue = window.sessionStorage.getItem(RESET_SESSION_STORAGE_KEY);
+    if (!rawValue) return { email: "", token: "" };
+
+    const parsed = JSON.parse(rawValue);
+    return {
+      email: typeof parsed?.email === "string" ? parsed.email : "",
+      token: typeof parsed?.token === "string" ? parsed.token : "",
+    };
+  } catch (error) {
+    return { email: "", token: "" };
+  }
+}
+
+function persistResetParamsInSession({ email, token }) {
+  if (typeof window === "undefined") return;
+
+  try {
+    if (!email && !token) {
+      window.sessionStorage.removeItem(RESET_SESSION_STORAGE_KEY);
+      return;
+    }
+
+    window.sessionStorage.setItem(
+      RESET_SESSION_STORAGE_KEY,
+      JSON.stringify({
+        email: String(email || ""),
+        token: String(token || ""),
+      }),
+    );
+  } catch (error) {}
+}
+
+function clearResetParamsFromSession() {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.sessionStorage.removeItem(RESET_SESSION_STORAGE_KEY);
+  } catch (error) {}
+}
+
+function readApprovalParamsFromUrl() {
+  if (typeof window === "undefined") return { email: "", token: "" };
+  const url = new URL(window.location.href);
+  return {
+    email: url.searchParams.get("approval_email") || "",
+    token: url.searchParams.get("approval_token") || "",
+  };
+}
+
+function clearApprovalParamsFromUrl() {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  url.searchParams.delete("approval_email");
+  url.searchParams.delete("approval_token");
+  window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
+function readApprovalParamsFromSession() {
+  if (typeof window === "undefined") return { email: "", token: "" };
+
+  try {
+    const rawValue = window.sessionStorage.getItem(APPROVAL_SESSION_STORAGE_KEY);
+    if (!rawValue) return { email: "", token: "" };
+
+    const parsed = JSON.parse(rawValue);
+    return {
+      email: typeof parsed?.email === "string" ? parsed.email : "",
+      token: typeof parsed?.token === "string" ? parsed.token : "",
+    };
+  } catch (error) {
+    return { email: "", token: "" };
+  }
+}
+
+function persistApprovalParamsInSession({ email, token }) {
+  if (typeof window === "undefined") return;
+
+  try {
+    if (!email && !token) {
+      window.sessionStorage.removeItem(APPROVAL_SESSION_STORAGE_KEY);
+      return;
+    }
+
+    window.sessionStorage.setItem(
+      APPROVAL_SESSION_STORAGE_KEY,
+      JSON.stringify({
+        email: String(email || ""),
+        token: String(token || ""),
+      }),
+    );
+  } catch (error) {}
+}
+
+function clearApprovalParamsFromSession() {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.sessionStorage.removeItem(APPROVAL_SESSION_STORAGE_KEY);
+  } catch (error) {}
+}
+
+function getInitialResetState() {
+  const urlParams = readResetParamsFromUrl();
+  const sessionParams = readResetParamsFromSession();
+  const initialParams = urlParams.email || urlParams.token ? urlParams : sessionParams;
+
+  return {
+    ...RESET_INITIAL_STATE,
+    email: initialParams.email,
+    token: initialParams.token,
+  };
+}
+
+export default function AuthScreen({
+  brand,
+  busy,
+  onLogin,
+  onRegister,
+  onCheckRegisterAvailability,
+  onConfirmRegisterApproval,
+  onRequestPasswordReset,
+  onResetPassword,
+}) {
+  const initialResetStateRef = React.useRef(null);
+  if (!initialResetStateRef.current) {
+    initialResetStateRef.current = getInitialResetState();
+  }
+
+  const initialResetState = initialResetStateRef.current;
+  const initialApprovalStateRef = React.useRef(null);
+  if (!initialApprovalStateRef.current) {
+    const urlParams = readApprovalParamsFromUrl();
+    const sessionParams = readApprovalParamsFromSession();
+    initialApprovalStateRef.current =
+      urlParams.email || urlParams.token ? urlParams : sessionParams;
+  }
+
+  const initialApprovalState = initialApprovalStateRef.current;
+  const [mode, setMode] = React.useState(initialResetState.token ? "reset" : "login");
   const [showPassword, setShowPassword] = React.useState(false);
   const [loginForm, setLoginForm] = React.useState({ email: "", password: "" });
   const [registerForm, setRegisterForm] = React.useState({
     fullName: "",
+    storeName: "",
     email: "",
+    country: DEFAULT_REGISTER_COUNTRY,
+    phone: "",
     password: "",
     confirmPassword: "",
   });
-  const [resetForm, setResetForm] = React.useState({
-    ...RESET_INITIAL_STATE,
-    email: resetParams.email,
-    token: resetParams.token,
-  });
+  const [resetForm, setResetForm] = React.useState(initialResetState);
   const [error, setError] = React.useState("");
-  const [info, setInfo] = React.useState("");
+  const [info, setInfo] = React.useState(
+    initialResetState.token ? "Link de recuperacao carregado. Define agora a tua nova palavra-passe." : "",
+  );
   const [devResetCode, setDevResetCode] = React.useState("");
   const [devResetLink, setDevResetLink] = React.useState("");
+  const [devApprovalLink, setDevApprovalLink] = React.useState("");
+  const [registerAvailability, setRegisterAvailability] = React.useState({
+    email: EMPTY_REGISTER_FIELD_STATUS,
+    phone: EMPTY_REGISTER_FIELD_STATUS,
+  });
   const [formVisibility, setFormVisibility] = React.useState({
     login: true,
     register: true,
     reset: true,
   });
+  const approvalAttemptedRef = React.useRef(false);
+  const registerCountry = registerForm.country || DEFAULT_REGISTER_COUNTRY;
+  const registerPhoneMeta = getStoreFieldMeta(registerCountry);
+  const registerDialCode = registerPhoneMeta.dialCode || "";
 
   React.useEffect(() => {
-    if (!resetParams.email || !resetParams.token) return;
-    setMode("reset");
-    setInfo("Link de recuperacao carregado. Define agora a tua nova palavra-passe.");
-  }, [resetParams.email, resetParams.token]);
+    const urlParams = readResetParamsFromUrl();
+    if (!urlParams.email && !urlParams.token) return;
+
+    persistResetParamsInSession(urlParams);
+    clearResetParamsFromUrl();
+  }, []);
+
+  React.useEffect(() => {
+    const urlParams = readApprovalParamsFromUrl();
+    if (!urlParams.email && !urlParams.token) return;
+
+    persistApprovalParamsInSession(urlParams);
+    clearApprovalParamsFromUrl();
+  }, []);
+
+  React.useEffect(() => {
+    if (!resetForm.token) {
+      clearResetParamsFromSession();
+      return;
+    }
+
+    persistResetParamsInSession({
+      email: resetForm.email.trim(),
+      token: resetForm.token.trim(),
+    });
+  }, [resetForm.email, resetForm.token]);
+
+  React.useEffect(() => {
+    const email = initialApprovalState.email.trim();
+    const token = initialApprovalState.token.trim();
+    if (!email || !token || approvalAttemptedRef.current) return;
+
+    approvalAttemptedRef.current = true;
+    setInfo("A validar o link de aprovacao da tua loja...");
+    setError("");
+
+    onConfirmRegisterApproval({ email, token })
+      .then((response) => {
+        setLoginForm({ email, password: "" });
+        setInfo(
+          response?.storeName
+            ? `Loja ${response.storeName} aprovada com sucesso. Entra agora com o teu email e a tua palavra-passe.`
+            : response?.message || "Loja aprovada com sucesso. Entra agora com o teu email e a tua palavra-passe.",
+        );
+        setMode("login");
+      })
+      .catch((approvalError) => {
+        setError(approvalError.message || "Nao foi possivel validar o link de aprovacao.");
+        setInfo("");
+      })
+      .finally(() => {
+        clearApprovalParamsFromSession();
+      });
+  }, [initialApprovalState.email, initialApprovalState.token, onConfirmRegisterApproval]);
+
+  React.useEffect(() => {
+    if (mode !== "register" || !onCheckRegisterAvailability) return undefined;
+
+    const email = registerForm.email.trim();
+    const phone = registerForm.phone.trim();
+    const emailReady = email.includes("@") && email.includes(".");
+    const phoneDigits = phone.replace(/\D/g, "");
+    const phoneValidation = validatePhoneForCountry(registerCountry, phone, "O numero de telemovel");
+    const phoneReady = Boolean(phoneValidation.normalized);
+    const phoneStatus = phoneDigits.length >= 8 && phoneValidation.error
+      ? buildInvalidFieldStatus(phoneValidation.error)
+      : EMPTY_REGISTER_FIELD_STATUS;
+
+    if (!emailReady && !phoneReady) {
+      setRegisterAvailability({
+        email: EMPTY_REGISTER_FIELD_STATUS,
+        phone: phoneStatus,
+      });
+      return undefined;
+    }
+
+    let cancelled = false;
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const availability = await onCheckRegisterAvailability({
+          email: emailReady ? email : "",
+          phone: phoneReady ? phoneValidation.normalized : "",
+        });
+        if (cancelled) return;
+        setRegisterAvailability({
+          email: emailReady
+            ? availability?.email || EMPTY_REGISTER_FIELD_STATUS
+            : EMPTY_REGISTER_FIELD_STATUS,
+          phone: phoneReady
+            ? availability?.phone || EMPTY_REGISTER_FIELD_STATUS
+            : phoneStatus,
+        });
+      } catch (availabilityError) {
+        if (cancelled) return;
+        setRegisterAvailability({
+          email: emailReady ? { state: "invalid", available: false, message: availabilityError.message || "Nao foi possivel validar o email." } : EMPTY_REGISTER_FIELD_STATUS,
+          phone: phoneReady ? { state: "invalid", available: false, message: availabilityError.message || "Nao foi possivel validar o numero de telemovel." } : phoneStatus,
+        });
+      }
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [mode, onCheckRegisterAvailability, registerCountry, registerForm.email, registerForm.phone]);
 
   function resetMessages() {
     setError("");
@@ -81,10 +354,12 @@ export default function AuthScreen({ brand, busy, onLogin, onRegister, onRequest
     setMode(nextMode);
     setDevResetCode("");
     setDevResetLink("");
+    setDevApprovalLink("");
     setShowPassword(false);
     resetMessages();
     if (nextMode !== "reset") {
       clearResetParamsFromUrl();
+      clearResetParamsFromSession();
       setResetForm((current) => ({ ...current, token: "" }));
     }
   }
@@ -94,6 +369,30 @@ export default function AuthScreen({ brand, busy, onLogin, onRegister, onRequest
       ...current,
       [modeKey]: !current[modeKey],
     }));
+  }
+
+  function getFieldStatusColor(status) {
+    if (status.state === "available") return "#166534";
+    if (status.state === "taken" || status.state === "invalid") return "#b91c1c";
+    return "var(--color-text-secondary)";
+  }
+
+  function handleRegisterEmailChange(event) {
+    const nextEmail = event.target.value;
+    setRegisterForm((current) => ({ ...current, email: nextEmail }));
+    setRegisterAvailability((current) => ({ ...current, email: EMPTY_REGISTER_FIELD_STATUS }));
+  }
+
+  function handleRegisterCountryChange(event) {
+    const nextCountry = event.target.value || DEFAULT_REGISTER_COUNTRY;
+    setRegisterForm((current) => ({ ...current, country: nextCountry }));
+    setRegisterAvailability((current) => ({ ...current, phone: EMPTY_REGISTER_FIELD_STATUS }));
+  }
+
+  function handleRegisterPhoneChange(event) {
+    const nextPhone = event.target.value;
+    setRegisterForm((current) => ({ ...current, phone: nextPhone }));
+    setRegisterAvailability((current) => ({ ...current, phone: EMPTY_REGISTER_FIELD_STATUS }));
   }
 
   async function submitLogin(event) {
@@ -113,6 +412,12 @@ export default function AuthScreen({ brand, busy, onLogin, onRegister, onRequest
   async function submitRegister(event) {
     event.preventDefault();
     resetMessages();
+    setDevApprovalLink("");
+
+    if (!registerForm.storeName.trim()) {
+      setError("Indica o nome da loja.");
+      return;
+    }
 
     if (registerForm.password.length < 10) {
       setError(PASSWORD_POLICY_HINT);
@@ -124,16 +429,42 @@ export default function AuthScreen({ brand, busy, onLogin, onRegister, onRequest
       return;
     }
 
+    const phoneResult = validatePhoneForCountry(registerCountry, registerForm.phone.trim(), "O numero de telemovel");
+    if (phoneResult.error) {
+      setError(phoneResult.error);
+      return;
+    }
+    if (!phoneResult.normalized) {
+      setError("O numero de telemovel e obrigatorio.");
+      return;
+    }
+
+    if (registerAvailability.email.state === "taken" || registerAvailability.email.state === "invalid") {
+      setError(registerAvailability.email.message || "Corrige o email antes de continuar.");
+      return;
+    }
+
+    if (registerAvailability.phone.state === "taken" || registerAvailability.phone.state === "invalid") {
+      setError(registerAvailability.phone.message || "Corrige o numero de telemovel antes de continuar.");
+      return;
+    }
+
     try {
       const response = await onRegister({
         fullName: registerForm.fullName.trim(),
+        storeName: registerForm.storeName.trim(),
         email: registerForm.email.trim(),
+        phone: phoneResult.normalized,
         password: registerForm.password,
       });
 
-      if (response?.pendingStoreSetup) {
+      if (response?.pendingApproval) {
         setLoginForm({ email: registerForm.email.trim(), password: "" });
-        setInfo(response.message || "Conta criada com sucesso. Aguarda a criacao da loja pelo administrador.");
+        setDevApprovalLink(response?.approvalLink || "");
+        setInfo(
+          response.message
+            || "Conta criada. Abre o email e confirma o link para criares e ativares a tua loja.",
+        );
         setMode("login");
       }
     } catch (submitError) {
@@ -203,6 +534,7 @@ export default function AuthScreen({ brand, busy, onLogin, onRegister, onRequest
         email: resetForm.email.trim(),
       });
       clearResetParamsFromUrl();
+      clearResetParamsFromSession();
       setMode("login");
     } catch (submitError) {
       setError(submitError.message || "Nao foi possivel atualizar a palavra-passe.");
@@ -261,7 +593,7 @@ export default function AuthScreen({ brand, busy, onLogin, onRegister, onRequest
           <div style={{ display: "flex", gap: "8px", padding: "6px", background: "var(--color-background-secondary)", borderRadius: "999px", marginBottom: "20px" }}>
             {[
               ["login", "Entrar"],
-              ["register", "Pedir acesso"],
+              ["register", "Criar conta"],
               ["reset", "Recuperar"],
             ].map(([id, label]) => (
               <button
@@ -330,6 +662,11 @@ export default function AuthScreen({ brand, busy, onLogin, onRegister, onRequest
 
                 {error && <div style={{ padding: "11px 12px", borderRadius: "var(--border-radius-md)", background: "#fee2e2", color: "#b91c1c", fontSize: "12px", fontWeight: "700" }}>{error}</div>}
                 {info && <div style={{ padding: "11px 12px", borderRadius: "var(--border-radius-md)", background: "#dcfce7", color: "#166534", fontSize: "12px", fontWeight: "700" }}>{info}</div>}
+                {devApprovalLink && (
+                  <div style={{ padding: "11px 12px", borderRadius: "var(--border-radius-md)", background: "#fff7ed", color: "#9a3412", fontSize: "12px", fontWeight: "700", wordBreak: "break-word" }}>
+                    Link de teste neste ambiente: <a href={devApprovalLink} style={{ color: "#1d4ed8" }}>{devApprovalLink}</a>
+                  </div>
+                )}
 
                 <button type="submit" data-testid="auth-login-submit" disabled={busy} style={{ border: "none", borderRadius: "var(--border-radius-md)", padding: "13px 16px", background: accent, color: "white", fontWeight: "800", cursor: busy ? "wait" : "pointer" }}>
                   {busy ? "A entrar..." : "Entrar no painel"}
@@ -344,15 +681,26 @@ export default function AuthScreen({ brand, busy, onLogin, onRegister, onRequest
 
           {mode === "register" ? (
             <CollapsiblePanel
-              title="Pede acesso a plataforma"
-              description="A conta pode ser criada aqui, mas a loja deixa de nascer automaticamente. O super admin precisa criar ou ativar a loja antes do primeiro acesso."
+              title="Cria a tua conta"
+              description="Confirma o email com um clique e a tua loja fica pronta sem depender de aprovacao manual do admin."
               open={formVisibility.register}
               onToggle={() => toggleFormVisibility("register")}
-              summary="Os campos de cadastro estao escondidos. Clica em Mostrar formulario para voltar a pedir acesso."
+              summary="Os campos de cadastro estao escondidos. Clica em Mostrar formulario para voltar a criar a tua conta."
               style={{ padding: 0, background: "transparent", border: "none", boxShadow: "none" }}
               bodyStyle={{ gap: "14px" }}
             >
               <form onSubmit={submitRegister} style={{ display: "grid", gap: "14px" }}>
+                <label style={{ display: "grid", gap: "8px" }}>
+                  <span style={{ fontSize: "12px", fontWeight: "700" }}>Nome da loja</span>
+                  <input
+                    data-testid="auth-register-store-name"
+                    value={registerForm.storeName}
+                    onChange={(event) => setRegisterForm({ ...registerForm, storeName: event.target.value })}
+                    placeholder="Ex: Boutique Kastro"
+                    style={FIELD_STYLE}
+                  />
+                </label>
+
                 <label style={{ display: "grid", gap: "8px" }}>
                   <span style={{ fontSize: "12px", fontWeight: "700" }}>Nome do responsavel</span>
                   <input
@@ -371,11 +719,80 @@ export default function AuthScreen({ brand, busy, onLogin, onRegister, onRequest
                     <input
                       data-testid="auth-register-email"
                       value={registerForm.email}
-                      onChange={(event) => setRegisterForm({ ...registerForm, email: event.target.value })}
+                      onChange={handleRegisterEmailChange}
                       placeholder="lojista@exemplo.com"
                       style={{ ...FIELD_STYLE, paddingLeft: "36px" }}
                     />
                   </div>
+                  {registerAvailability.email.message ? (
+                    <div style={{ fontSize: "11px", color: getFieldStatusColor(registerAvailability.email) }}>
+                      {registerAvailability.email.message}
+                    </div>
+                  ) : null}
+                </label>
+
+                <label style={{ display: "grid", gap: "8px" }}>
+                  <span style={{ fontSize: "12px", fontWeight: "700" }}>Pais do telemovel</span>
+                  <select
+                    data-testid="auth-register-country"
+                    value={registerCountry}
+                    onChange={handleRegisterCountryChange}
+                    style={FIELD_STYLE}
+                  >
+                    {COUNTRY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label style={{ display: "grid", gap: "8px" }}>
+                  <span style={{ fontSize: "12px", fontWeight: "700" }}>Telemovel / WhatsApp com DDI</span>
+                  <div style={{ position: "relative" }}>
+                    <Phone size={15} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--color-text-secondary)" }} />
+                    {registerDialCode ? (
+                      <div
+                        style={{
+                          position: "absolute",
+                          left: "36px",
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          display: "flex",
+                          alignItems: "center",
+                          minHeight: "28px",
+                          padding: "0 10px",
+                          borderRadius: "999px",
+                          border: "0.5px solid var(--color-border-tertiary)",
+                          background: "var(--color-background-secondary)",
+                          color: "var(--color-text-primary)",
+                          fontSize: "12px",
+                          fontWeight: "800",
+                        }}
+                      >
+                        +{registerDialCode}
+                      </div>
+                    ) : null}
+                    <input
+                      data-testid="auth-register-phone"
+                      value={registerForm.phone}
+                      onChange={handleRegisterPhoneChange}
+                      placeholder={registerPhoneMeta.phonePlaceholder || "923000000"}
+                      inputMode="tel"
+                      autoComplete="tel-national"
+                      style={{ ...FIELD_STYLE, paddingLeft: registerDialCode ? "94px" : "36px" }}
+                    />
+                  </div>
+                  <div style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
+                    {registerDialCode
+                      ? `Escreve o numero sem o codigo do pais. Juntamos +${registerDialCode} automaticamente.`
+                      : "Usa o numero com codigo do pais para podermos validar e criar a loja corretamente."}
+                  </div>
+                  {registerAvailability.phone.message ? (
+                    <div style={{ fontSize: "11px", color: getFieldStatusColor(registerAvailability.phone) }}>
+                      {registerAvailability.phone.message}
+                    </div>
+                  ) : null}
                 </label>
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
@@ -428,7 +845,7 @@ export default function AuthScreen({ brand, busy, onLogin, onRegister, onRequest
                 {info && <div style={{ padding: "11px 12px", borderRadius: "var(--border-radius-md)", background: "#dcfce7", color: "#166534", fontSize: "12px", fontWeight: "700" }}>{info}</div>}
 
                 <button type="submit" data-testid="auth-register-submit" disabled={busy} style={{ border: "none", borderRadius: "var(--border-radius-md)", padding: "13px 16px", background: accent, color: "white", fontWeight: "800", cursor: busy ? "wait" : "pointer" }}>
-                  {busy ? "A enviar..." : "Pedir acesso"}
+                  {busy ? "A enviar..." : "Criar conta"}
                 </button>
               </form>
             </CollapsiblePanel>

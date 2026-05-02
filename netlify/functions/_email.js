@@ -11,7 +11,20 @@ function getHeader(event, name) {
   return "";
 }
 
+function isLocalRequestHost(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized.includes("localhost") || normalized.includes("127.0.0.1");
+}
+
 function getAppBaseUrl(event) {
+  const forwardedProto = getHeader(event, "x-forwarded-proto");
+  const host = getHeader(event, "x-forwarded-host") || getHeader(event, "host");
+  const protocol = forwardedProto || (isLocalRequestHost(host) ? "http" : "https");
+
+  if (host && isLocalRequestHost(host)) {
+    return `${protocol}://${host}`.replace(/\/$/, "");
+  }
+
   const configured =
     process.env.APP_BASE_URL ||
     process.env.PUBLIC_APP_URL ||
@@ -22,10 +35,6 @@ function getAppBaseUrl(event) {
   if (configured) {
     return String(configured).replace(/\/$/, "");
   }
-
-  const forwardedProto = getHeader(event, "x-forwarded-proto");
-  const host = getHeader(event, "x-forwarded-host") || getHeader(event, "host");
-  const protocol = forwardedProto || (String(host).includes("localhost") || String(host).includes("127.0.0.1") ? "http" : "https");
 
   if (!host) {
     throw new Error("Nao foi possivel determinar a URL publica da aplicacao.");
@@ -41,16 +50,35 @@ function buildPasswordResetLink(event, email, token) {
   return url.toString();
 }
 
+function buildRegistrationApprovalLink(event, email, token) {
+  const url = new URL("/auth", `${getAppBaseUrl(event)}/`);
+  url.searchParams.set("approval_email", email);
+  url.searchParams.set("approval_token", token);
+  return url.toString();
+}
+
 function isEmailDeliveryConfigured() {
   return Boolean(process.env.RESEND_API_KEY && process.env.PASSWORD_RESET_FROM_EMAIL);
 }
 
-async function sendPasswordResetEmail({ event, toEmail, resetLink }) {
+function getTransactionalSender() {
   const apiKey = String(process.env.RESEND_API_KEY || "").trim();
   const fromAddress = String(process.env.PASSWORD_RESET_FROM_EMAIL || "").trim();
   const fromName = String(process.env.PASSWORD_RESET_FROM_NAME || "KastroZap").trim();
   const replyTo = String(process.env.PASSWORD_RESET_REPLY_TO || "").trim();
   const from = fromAddress.includes("<") ? fromAddress : `${fromName} <${fromAddress}>`;
+
+  return {
+    apiKey,
+    fromAddress,
+    fromName,
+    replyTo,
+    from,
+  };
+}
+
+async function sendPasswordResetEmail({ event, toEmail, resetLink }) {
+  const { apiKey, fromAddress, replyTo, from } = getTransactionalSender();
 
   if (!apiKey || !fromAddress) {
     throw new Error("O envio de email de recuperacao ainda nao esta configurado.");
@@ -117,11 +145,79 @@ async function sendPasswordResetEmail({ event, toEmail, resetLink }) {
   }
 }
 
+async function sendRegistrationApprovalEmail({ event, toEmail, fullName, storeName, approvalLink }) {
+  const { apiKey, fromAddress, replyTo, from } = getTransactionalSender();
+
+  if (!apiKey || !fromAddress) {
+    throw new Error("O envio de email para aprovar a loja ainda nao esta configurado.");
+  }
+
+  const resolvedStoreName = String(storeName || "").trim() || "a tua loja";
+  const greetingName = String(fullName || "").trim() || "Ola";
+  const subject = `Confirma o teu email e ativa a loja ${resolvedStoreName}`;
+  const html = `
+    <div style="margin:0;padding:24px;background:#f3f7f5;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
+      <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;border:1px solid #d9e7df;">
+        <div style="padding:28px 28px 20px;background:linear-gradient(135deg,#1b1c48 0%,#25ae82 62%,#ffc61a 180%);color:#ffffff;">
+          <div style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;font-weight:700;opacity:0.82;">KastroZap</div>
+          <h1 style="margin:14px 0 0;font-size:28px;line-height:1.08;">Confirma o teu email e ativa a loja</h1>
+          <p style="margin:12px 0 0;font-size:14px;line-height:1.5;max-width:420px;opacity:0.94;">
+            ${greetingName}, falta so um clique para criar e ativar a loja <strong>${resolvedStoreName}</strong>.
+          </p>
+        </div>
+        <div style="padding:28px;">
+          <p style="margin:0 0 18px;font-size:14px;line-height:1.6;">
+            Usa o botao abaixo para confirmar o teu email. Depois disso, a loja fica pronta para entrares com o teu email e a tua palavra-passe.
+          </p>
+          <div style="margin:28px 0;">
+            <a href="${approvalLink}" style="display:inline-block;padding:14px 22px;border-radius:12px;background:#25ae82;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;">
+              Aprovar e criar loja
+            </a>
+          </div>
+          <p style="margin:0 0 10px;font-size:12px;color:#475569;">Se o botao nao abrir, copia este link no browser:</p>
+          <p style="margin:0;font-size:12px;line-height:1.6;word-break:break-all;color:#1d4ed8;">${approvalLink}</p>
+          <p style="margin:18px 0 0;font-size:12px;color:#475569;">Este link e valido por 24 horas e so deve ser usado por ti.</p>
+        </div>
+      </div>
+    </div>
+  `;
+  const text = [
+    "KastroZap",
+    "",
+    `${greetingName}, falta so um clique para ativar a loja ${resolvedStoreName}.`,
+    "Usa este link nas proximas 24 horas:",
+    approvalLink,
+    "",
+    "Depois disso ja podes entrar com o teu email e a tua palavra-passe.",
+  ].join("\n");
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from,
+      to: [toEmail],
+      reply_to: replyTo || undefined,
+      subject,
+      html,
+      text,
+    }),
+  });
+
+  if (!response.ok) {
+    let errorBody = "";
+    try {
+      errorBody = await response.text();
+    } catch (error) {}
+    throw new Error(errorBody || "Falha ao enviar o email de aprovacao da loja.");
+  }
+}
+
 async function sendPlanActivationEmail({ toEmail, storeName, planName, expiryDate, totalPrice, currencyCode }) {
-  const apiKey = String(process.env.RESEND_API_KEY || "").trim();
-  const fromAddress = String(process.env.PASSWORD_RESET_FROM_EMAIL || "").trim();
-  const fromName = String(process.env.PASSWORD_RESET_FROM_NAME || "KastroZap").trim();
-  const from = fromAddress.includes("<") ? fromAddress : `${fromName} <${fromAddress}>`;
+  const { apiKey, fromAddress, from } = getTransactionalSender();
 
   if (!apiKey || !fromAddress) return;
 
@@ -179,8 +275,10 @@ async function sendPlanActivationEmail({ toEmail, storeName, planName, expiryDat
 }
 
 export { 
+  buildRegistrationApprovalLink,
   buildPasswordResetLink, 
   isEmailDeliveryConfigured, 
+  sendRegistrationApprovalEmail,
   sendPasswordResetEmail, 
   sendPlanActivationEmail 
 };

@@ -6,6 +6,8 @@ export default function AuthRoute({
   busy,
   onLogin,
   onRegister,
+  onCheckRegisterAvailability,
+  onConfirmRegisterApproval,
   onRequestPasswordReset,
   onResetPassword,
 }) {
@@ -16,6 +18,8 @@ export default function AuthRoute({
         busy={busy}
         onLogin={onLogin}
         onRegister={onRegister}
+        onCheckRegisterAvailability={onCheckRegisterAvailability}
+        onConfirmRegisterApproval={onConfirmRegisterApproval}
         onRequestPasswordReset={onRequestPasswordReset}
         onResetPassword={onResetPassword}
       />
