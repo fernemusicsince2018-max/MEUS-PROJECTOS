@@ -53,12 +53,18 @@ function getCatalogApiStatus() {
     missing.push("VITE_CATALOG_API_BASE");
   }
 
+  const apiDetails = apiBaseUrl === "/api"
+    ? "Frontend pronto para usar a API remota em /api com redirect serverless da Netlify para /.netlify/functions."
+    : apiBaseUrl.startsWith("/.netlify/functions")
+      ? `Frontend pronto para usar a API remota em ${apiBaseUrl}. Este caminho legado continua valido, mas em Netlify o recomendado agora e usar VITE_CATALOG_API_BASE=/api.`
+      : `Frontend pronto para usar a API remota em ${apiBaseUrl}.`;
+
   return createStatus(
     "catalog_api",
     "API remota do catalogo",
     Boolean(apiBaseUrl),
     apiBaseUrl
-      ? `Frontend pronto para usar a API remota em ${apiBaseUrl}.`
+      ? apiDetails
       : allowLocalFallback
         ? "O fallback local do frontend esta ativo. Isso so deve ser usado em desenvolvimento local, nunca como plano de producao."
         : "Sem VITE_CATALOG_API_BASE, a app bloqueia o arranque fora de localhost para evitar gravacao em localStorage em producao.",

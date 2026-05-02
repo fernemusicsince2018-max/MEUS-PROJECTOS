@@ -11,6 +11,7 @@ import { runPublicCatalogSnapshotTests } from "../tests/publicCatalogSnapshots.t
 import { runCorsHeadersTests } from "../tests/corsHeaders.test.js";
 import { runAppRoutesTests } from "../tests/appRoutes.test.js";
 import { runAppServerTests } from "../tests/appServer.test.js";
+import { runNetlifyConfigTests } from "../tests/netlifyConfig.test.js";
 import { runSuperAdminAccessTests } from "../tests/superAdminAccess.test.js";
 import { runSystemSettingsTests } from "../tests/systemSettings.test.js";
 
@@ -28,6 +29,7 @@ const suites = [
   ["corsHeaders", runCorsHeadersTests],
   ["appRoutes", runAppRoutesTests],
   ["appServer", runAppServerTests],
+  ["netlifyConfig", runNetlifyConfigTests],
   ["superAdminAccess", runSuperAdminAccessTests],
   ["systemSettings", runSystemSettingsTests],
 ];

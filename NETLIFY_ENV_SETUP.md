@@ -2,6 +2,7 @@
 
 Guia pratico para configurar no Netlify o nucleo de staging/producao e as integracoes opcionais do projeto:
 
+- Netlify a servir a SPA e as functions em `/api`
 - PostgreSQL com pooler para serverless
 - Reset de senha por email com Resend
 - Notificacoes automaticas com WhatsApp Cloud API
@@ -27,14 +28,32 @@ Sugestao:
 - aplica estas variaveis em `Production`
 - se usares preview/staging, replica tambem em `Deploy previews` ou no contexto equivalente
 
-## 0. PostgreSQL e pooler
+## 0. Base de dados Supabase + routing Netlify
+
+Para este projeto, `Supabase` entra em duas frentes diferentes:
+
+- `Supabase Postgres` para a base de dados principal
+- `Supabase Storage` para uploads/CDN de imagens
+
+Antes das envs, confirma estes dois pontos estruturais:
+
+1. no Supabase, carrega `backend/postgresql/schema.sql`
+2. aplica tambem as migrations em `backend/postgresql/migrations/`
+3. no Netlify, mantem o redirect `"/api/*" -> "/.netlify/functions/:splat"` activo no `netlify.toml`
+
+Importante:
+
+- nao uses `backend/supabase/schema.sql` para provisionar a base actual; esse ficheiro ficou como guardrail e falha de proposito para evitar um schema incompleto
+- o endpoint publico esperado pelo frontend e `/api/...`, embora a compatibilidade legada em `/.netlify/functions/...` continue disponivel
+
+## 1. PostgreSQL e pooler
 
 Variaveis do nucleo:
 
 - `POSTGRES_POOLER_URL`
-  Valor esperado: connection string do pooler PostgreSQL
+  Valor esperado: connection string do pooler PostgreSQL do Supabase
   Exemplo: `postgres://user:password@pooler-host:6543/database?sslmode=require`
-  Onde obter: fornecedor da base de dados / pooler gerido
+  Onde obter: `Supabase > Project Settings > Database > Connection string > Session pooler` ou equivalente do pooler ativo
 
 - `POSTGRES_USE_POOLER`
   Valor esperado: `true`
@@ -84,7 +103,7 @@ Checklist rapido desta frente:
 - `POSTGRES_USE_POOLER=true`
 - novo deploy feito apos gravar as envs
 
-## 1. Reset de senha por email
+## 2. Reset de senha por email
 
 Variaveis:
 
@@ -135,7 +154,7 @@ Checklist rapido desta frente:
 - remetente autorizado no Resend
 - `APP_BASE_URL` sem barra final desnecessaria
 
-## 2. WhatsApp Cloud API
+## 3. WhatsApp Cloud API
 
 Variaveis:
 
@@ -187,7 +206,7 @@ Checklist rapido desta frente:
 - templates aprovados com nomes exatamente iguais aos definidos acima
 - idioma do template igual a `WHATSAPP_CLOUD_TEMPLATE_LANGUAGE`
 
-### 2.1 Dispatcher da fila de notificacoes
+### 3.1 Dispatcher da fila de notificacoes
 
 Variaveis:
 
@@ -195,7 +214,7 @@ Variaveis:
   Valor esperado: segredo forte e unico
   Exemplo: `kz-prod-dispatch-2026`
   Onde obter: gerado por ti
-  Nota: protege o `POST` manual de `/.netlify/functions/notifications-dispatch`
+  Nota: protege o `POST` manual de `/api/notifications-dispatch`
 
 - `NOTIFICATION_JOB_BATCH_SIZE`
   Valor esperado: tamanho do lote por execucao
@@ -217,7 +236,7 @@ Notas:
 - scheduled functions do Netlify correm apenas em deploys published e usam UTC
 - para testes manuais, podes usar `Run now` na UI de Functions do Netlify ou continuar a chamar o endpoint manual com `Authorization: Bearer <NOTIFICATION_DISPATCH_SECRET>`
 
-## 3. Supabase Storage
+## 4. Supabase Storage
 
 Variaveis:
 
@@ -252,7 +271,7 @@ Checklist rapido desta frente:
 - chave `service_role` copiada corretamente
 - bucket publico disponivel ou permissao para o backend cria-lo
 
-## 4. Resumo completo para o Netlify
+## 5. Resumo completo para o Netlify
 
 Se quiseres preencher tudo de uma vez no deploy, este e o conjunto completo do nucleo serverless e das integracoes:
 
@@ -289,7 +308,7 @@ SUPABASE_SERVICE_ROLE_KEY=eyJxxxxxxxxxxxxx
 SUPABASE_STORAGE_BUCKET=catalog-assets
 ```
 
-## 5. Validacao apos deploy
+## 6. Validacao apos deploy
 
 Depois de gravar as variaveis no Netlify:
 
@@ -301,7 +320,7 @@ Depois de gravar as variaveis no Netlify:
 6. faz upload de logo ou foto de produto a partir de ficheiro e confirma se a imagem ficou com URL publica
 7. no staging, corre o load test com `merchantPageLimit=20`, `50` e `100`
 
-## 6. Leitura do readiness
+## 7. Leitura do readiness
 
 O comando local:
 
@@ -314,9 +333,10 @@ deve ser lido assim:
 - `Nucleo operacional: OK` = a base da app esta pronta para funcionar
 - `Status geral: OK` = nucleo + integracoes complementares completas
 
-## 7. Ficheiros relacionados
+## 8. Ficheiros relacionados
 
 - [README.md](./README.md)
+- [NETLIFY_SUPABASE_DEPLOY.md](./NETLIFY_SUPABASE_DEPLOY.md)
 - [PRODUCTION_CHECKLIST.md](./PRODUCTION_CHECKLIST.md)
 - [STAGING_LOAD_TEST.md](./STAGING_LOAD_TEST.md)
 - [WHATSAPP_TEMPLATE_CURLS.md](./WHATSAPP_TEMPLATE_CURLS.md)

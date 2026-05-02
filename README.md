@@ -87,6 +87,14 @@ Isto garante refresh direto em rotas como `/`, `/app`, `/catalog/:storeId` e `/t
 
 ## Configuracao PostgreSQL
 
+Para usar Supabase como base de dados, nao precisas de adapter especial: o backend ja fala com PostgreSQL via `pg`.
+Na pratica, Supabase entra aqui como `Postgres gerido + pooler + storage`.
+Em producao serverless na Netlify, a combinacao recomendada e:
+
+- `POSTGRES_POOLER_URL` com a connection string do Supabase Session/Transaction Pooler
+- `POSTGRES_USE_POOLER=true`
+- `POSTGRES_SSL=true` ou `sslmode=require` na propria connection string
+
 O frontend ja esta preparado para falar com funcoes serverless que leem e gravam dados num PostgreSQL real.
 
 ### Variaveis de ambiente
@@ -213,7 +221,22 @@ Notas:
 - Sem storage configurado, o painel continua a aceitar links publicos colados manualmente.
 - Se ainda existirem logos ou fotos antigas em base64, o backend tenta migrar esses assets para URL publica no momento do save.
 
-### Criar a base no pgAdmin
+### Criar a base
+
+#### No Supabase
+
+1. Cria o projeto no Supabase.
+2. Abre `SQL Editor`.
+3. Executa `backend/postgresql/schema.sql`.
+4. Aplica tambem as migrations em `backend/postgresql/migrations/` pela ordem necessaria ao teu ambiente.
+5. Em `Project Settings` > `Database`, copia a connection string do pooler para `POSTGRES_POOLER_URL`.
+
+Importante:
+
+- nao uses `backend/supabase/schema.sql` para provisionar a base actual; esse ficheiro ficou apenas como guardrail para evitar um setup incompleto
+- para Netlify + Supabase, o schema correcto e o de `backend/postgresql`
+
+#### No pgAdmin
 
 1. Abre o `pgAdmin`.
 2. Cria uma database chamada `ferna_catalogo`.
@@ -411,6 +434,26 @@ A Fase 1 ja inclui:
 - redirect SPA no hosting web e API separada em `/api`
 
 ## Deploy Web + API
+
+### Netlify + Supabase
+
+Para este stack, o repositorio espera:
+
+- frontend estatico publicado pela Netlify
+- `netlify/functions` como API serverless
+- redirect `"/api/*" -> "/.netlify/functions/:splat"` no `netlify.toml`
+- Supabase Postgres no `POSTGRES_POOLER_URL`
+- Supabase Storage em `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e `SUPABASE_STORAGE_BUCKET`
+
+Guia rapido:
+
+1. carrega o schema actual no Supabase com `backend/postgresql/schema.sql`
+2. aplica as migrations de `backend/postgresql/migrations/`
+3. preenche as envs a partir de `.env.production.example`
+4. cria o site na Netlify com `Build command = npm run build`, `Publish directory = dist` e `Functions directory = netlify/functions`
+5. faz deploy e valida `npm run readiness`
+
+Para o passo-a-passo completo, consulta [NETLIFY_SUPABASE_DEPLOY.md](./NETLIFY_SUPABASE_DEPLOY.md) e [NETLIFY_ENV_SETUP.md](./NETLIFY_ENV_SETUP.md).
 
 1. Corre `npm run build`.
 2. Publica a app Node com `npm start` se quiseres servir frontend compilado + SPA + API no mesmo processo.
