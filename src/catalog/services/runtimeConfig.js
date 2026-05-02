@@ -82,7 +82,7 @@ export function getRuntimeConfig() {
     apiRequiredMessage: policy.apiRequiredMessage,
     runtimePolicy: policy,
     brand: {
-      name: globalConfig.brandName || readEnv("VITE_BRAND_NAME") || "KASTROZAPP",
+      name: globalConfig.brandName || readEnv("VITE_BRAND_NAME") || "KastroZap",
       tagline:
         globalConfig.brandTagline ||
         readEnv("VITE_BRAND_TAGLINE") ||

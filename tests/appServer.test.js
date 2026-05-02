@@ -156,7 +156,7 @@ export async function runAppServerTests() {
     assert.equal(catalogResponse.status, 200);
     const catalogHtml = await catalogResponse.text();
     assert.match(catalogHtml, /shell/);
-    assert.match(catalogHtml, /Loja Demo \| KASTROZAPP/);
+    assert.match(catalogHtml, /Loja Demo \| KastroZap/);
     assert.match(catalogHtml, /Produtos frescos da loja demo/);
 
     const assetResponse = await fetch(`${baseUrl}/assets/app-abc123.js`);

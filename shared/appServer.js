@@ -75,7 +75,7 @@ function escapeAttribute(value) {
 
 function getBrandConfig(env = process.env) {
   return {
-    name: cleanText(env.VITE_BRAND_NAME || env.BRAND_NAME) || "KASTROZAPP",
+    name: cleanText(env.VITE_BRAND_NAME || env.BRAND_NAME) || "KastroZap",
     tagline: cleanText(env.VITE_BRAND_TAGLINE || env.BRAND_TAGLINE) || "Sua loja no WhatsApp.",
     accent: cleanText(env.VITE_BRAND_ACCENT || env.BRAND_ACCENT) || "#25ae82",
     dark: cleanText(env.VITE_BRAND_DARK || env.BRAND_DARK) || "#1b1c48",
@@ -123,7 +123,7 @@ function injectManagedHead(html = "", metadata = {}) {
   const canonicalUrl = cleanText(metadata.canonicalUrl);
   const imageUrl = cleanText(metadata.imageUrl);
   const robots = cleanText(metadata.robots);
-  const title = cleanText(metadata.title) || "KASTROZAPP";
+  const title = cleanText(metadata.title) || "KastroZap";
   const description = cleanText(metadata.description) || "Sua loja no WhatsApp com catalogo digital.";
   const appTitle = cleanText(metadata.appTitle) || title;
   const themeColor = cleanText(metadata.themeColor) || "#25ae82";

@@ -12,6 +12,7 @@ import { runCorsHeadersTests } from "../tests/corsHeaders.test.js";
 import { runAppRoutesTests } from "../tests/appRoutes.test.js";
 import { runAppServerTests } from "../tests/appServer.test.js";
 import { runNetlifyConfigTests } from "../tests/netlifyConfig.test.js";
+import { runPasswordResetConfigTests } from "../tests/passwordResetConfig.test.js";
 import { runSuperAdminAccessTests } from "../tests/superAdminAccess.test.js";
 import { runSystemSettingsTests } from "../tests/systemSettings.test.js";
 
@@ -30,6 +31,7 @@ const suites = [
   ["appRoutes", runAppRoutesTests],
   ["appServer", runAppServerTests],
   ["netlifyConfig", runNetlifyConfigTests],
+  ["passwordResetConfig", runPasswordResetConfigTests],
   ["superAdminAccess", runSuperAdminAccessTests],
   ["systemSettings", runSystemSettingsTests],
 ];

@@ -35,7 +35,7 @@ function getAppBaseUrl(event) {
 }
 
 function buildPasswordResetLink(event, email, token) {
-  const url = new URL(getAppBaseUrl(event));
+  const url = new URL("/auth", `${getAppBaseUrl(event)}/`);
   url.searchParams.set("reset_email", email);
   url.searchParams.set("reset_token", token);
   return url.toString();
@@ -48,7 +48,7 @@ function isEmailDeliveryConfigured() {
 async function sendPasswordResetEmail({ event, toEmail, resetLink }) {
   const apiKey = String(process.env.RESEND_API_KEY || "").trim();
   const fromAddress = String(process.env.PASSWORD_RESET_FROM_EMAIL || "").trim();
-  const fromName = String(process.env.PASSWORD_RESET_FROM_NAME || "KASTROZAPP").trim();
+  const fromName = String(process.env.PASSWORD_RESET_FROM_NAME || "KastroZap").trim();
   const replyTo = String(process.env.PASSWORD_RESET_REPLY_TO || "").trim();
   const from = fromAddress.includes("<") ? fromAddress : `${fromName} <${fromAddress}>`;
 
@@ -56,12 +56,12 @@ async function sendPasswordResetEmail({ event, toEmail, resetLink }) {
     throw new Error("O envio de email de recuperacao ainda nao esta configurado.");
   }
 
-  const subject = "Recupera o acesso ao KASTROZAPP";
+  const subject = "Recupera o acesso ao KastroZap";
   const html = `
     <div style="margin:0;padding:24px;background:#f3f7f5;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
       <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;border:1px solid #d9e7df;">
         <div style="padding:28px 28px 20px;background:linear-gradient(135deg,#1b1c48 0%,#25ae82 62%,#ffc61a 180%);color:#ffffff;">
-          <div style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;font-weight:700;opacity:0.82;">KASTROZAPP</div>
+          <div style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;font-weight:700;opacity:0.82;">KastroZap</div>
           <h1 style="margin:14px 0 0;font-size:28px;line-height:1.08;">Recupera a tua palavra-passe</h1>
           <p style="margin:12px 0 0;font-size:14px;line-height:1.5;max-width:420px;opacity:0.94;">
             Recebemos um pedido para redefinir o acesso da tua conta. Usa o botao abaixo para escolher uma nova palavra-passe.
@@ -83,7 +83,7 @@ async function sendPasswordResetEmail({ event, toEmail, resetLink }) {
     </div>
   `;
   const text = [
-    "KASTROZAPP",
+    "KastroZap",
     "",
     "Recebemos um pedido para redefinir a tua palavra-passe.",
     "Usa este link nas proximas 30 minutos:",
@@ -120,7 +120,7 @@ async function sendPasswordResetEmail({ event, toEmail, resetLink }) {
 async function sendPlanActivationEmail({ toEmail, storeName, planName, expiryDate, totalPrice, currencyCode }) {
   const apiKey = String(process.env.RESEND_API_KEY || "").trim();
   const fromAddress = String(process.env.PASSWORD_RESET_FROM_EMAIL || "").trim();
-  const fromName = String(process.env.PASSWORD_RESET_FROM_NAME || "KASTROZAPP").trim();
+  const fromName = String(process.env.PASSWORD_RESET_FROM_NAME || "KastroZap").trim();
   const from = fromAddress.includes("<") ? fromAddress : `${fromName} <${fromAddress}>`;
 
   if (!apiKey || !fromAddress) return;
@@ -131,7 +131,7 @@ async function sendPlanActivationEmail({ toEmail, storeName, planName, expiryDat
     currency: currencyCode || "AOA",
   }).format(totalPrice);
 
-  const subject = `Plano Ativado: Bem-vindo ao ${planName}!`;
+  const subject = `Plano ativado: bem-vindo ao ${planName}!`;
   const html = `
     <div style="margin:0;padding:24px;background:#f3f7f5;font-family:Arial,sans-serif;color:#0f172a;">
       <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;border:1px solid #d9e7df;">

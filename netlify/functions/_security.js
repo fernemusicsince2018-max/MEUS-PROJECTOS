@@ -300,7 +300,33 @@ function normalizeProductImageCollection(value, fieldLabel = "O produto") {
 }
 
 function shouldExposeResetCode() {
-  return process.env.NODE_ENV !== "production" || String(process.env.CATALOG_EXPOSE_RESET_CODE || "").toLowerCase() === "true";
+  const explicitFlag = String(process.env.CATALOG_EXPOSE_RESET_CODE || "").trim().toLowerCase();
+  if (explicitFlag === "true") {
+    return true;
+  }
+
+  const netlifyLocal = String(process.env.NETLIFY_LOCAL || "").trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(netlifyLocal)) {
+    return true;
+  }
+
+  const context = String(process.env.CONTEXT || "").trim().toLowerCase();
+  if (["production", "deploy-preview", "branch-deploy"].includes(context)) {
+    return false;
+  }
+
+  const appBaseUrl = String(process.env.APP_BASE_URL || "").trim().toLowerCase();
+  if (
+    appBaseUrl.startsWith("http://localhost")
+    || appBaseUrl.startsWith("http://127.0.0.1")
+    || appBaseUrl.startsWith("https://localhost")
+    || appBaseUrl.startsWith("https://127.0.0.1")
+  ) {
+    return true;
+  }
+
+  const nodeEnv = String(process.env.NODE_ENV || "").trim().toLowerCase();
+  return nodeEnv && nodeEnv !== "production";
 }
 
 export {
