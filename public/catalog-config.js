@@ -4,7 +4,7 @@ window.__CATALOG_CONFIG__ = {
   publicCatalogBaseUrl: "",
   publicCatalogBaseDomain: "",
   brandName: "KASTROZAPP",
-  brandTagline: "Sua loja no WhatsApp.",
+  brandTagline: "Vende mais no WhatsApp.",
   brandAccent: "#25ae82",
   brandDark: "#1b1c48",
   brandHighlight: "#ffc61a",

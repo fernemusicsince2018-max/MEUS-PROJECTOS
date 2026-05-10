@@ -1,5 +1,5 @@
 import React from "react";
-import { ArrowLeft, Clock3, Package, Phone } from "lucide-react";
+import { ArrowLeft, Clock3, Package, Phone, Star } from "lucide-react";
 import { SURFACE_STYLE } from "../../constants.js";
 import { fmtMoney } from "../../utils/format.js";
 import {
@@ -7,6 +7,7 @@ import {
   formatCustomerDiscountPercent,
   formatOrderDateTime,
   formatOrderDurationMs,
+  getOrderReviewEligibility,
   getFulfillmentLabel,
   getOrderCurrentStatusTiming,
   getOrderRegionLabel,
@@ -54,13 +55,61 @@ function StepTimingCard({ label, timing }) {
   );
 }
 
-export default function OrderTrackingPage({ order, loading = false, error = "", onBackToStore }) {
+function ReviewStars({ value = 0, onChange, disabled = false, color = "#f59e0b" }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+      {[1, 2, 3, 4, 5].map((ratingValue) => {
+        const active = ratingValue <= value;
+        return (
+          <button
+            key={ratingValue}
+            type="button"
+            onClick={() => onChange?.(ratingValue)}
+            disabled={disabled}
+            aria-label={`${ratingValue} estrela${ratingValue === 1 ? "" : "s"}`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: "42px",
+              height: "42px",
+              borderRadius: "14px",
+              border: active ? `1px solid ${color}33` : "1px solid var(--color-border-tertiary)",
+              background: active ? `${color}14` : "white",
+              color,
+              cursor: disabled ? "not-allowed" : "pointer",
+              opacity: disabled ? 0.65 : 1,
+            }}
+          >
+            <Star size={20} fill={active ? color : "none"} />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function OrderTrackingPage({
+  order,
+  loading = false,
+  error = "",
+  reviewBusy = false,
+  onSubmitReview,
+  onBackToStore,
+}) {
   const [now, setNow] = React.useState(() => Date.now());
+  const [reviewRating, setReviewRating] = React.useState(0);
+  const [reviewComment, setReviewComment] = React.useState("");
 
   React.useEffect(() => {
     const intervalId = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(intervalId);
   }, []);
+
+  React.useEffect(() => {
+    setReviewRating(Number(order?.review?.rating || 0));
+    setReviewComment(order?.review?.comment || "");
+  }, [order?.id, order?.review?.rating, order?.review?.comment, order?.review?.updatedAt]);
 
   if (loading) {
     return (
@@ -102,6 +151,32 @@ export default function OrderTrackingPage({ order, loading = false, error = "", 
   const deliveredEntry = timeline.find((entry) => entry.status === "delivered");
   const totalCycleEnd = deliveredEntry?.completedAt || now;
   const totalCycleMs = Math.max(0, new Date(totalCycleEnd).getTime() - new Date(order.createdAt).getTime());
+  const review = order.review || null;
+  const reviewEligibility = getOrderReviewEligibility(order);
+  const canReviewOrder = reviewEligibility.eligible;
+  const savedReviewRating = Number(review?.rating || 0);
+  const savedReviewComment = String(review?.comment || "").trim();
+  const normalizedDraftComment = String(reviewComment || "").trim();
+  const hasSavedReview = savedReviewRating > 0;
+  const hasReviewChanges = reviewRating !== savedReviewRating || normalizedDraftComment !== savedReviewComment;
+  const reviewReadyToSubmit = canReviewOrder && reviewRating > 0 && (!hasSavedReview || hasReviewChanges);
+  const reviewSectionTitle = canReviewOrder
+    ? hasSavedReview
+      ? "Atualiza a tua avaliacao desta loja"
+      : "A tua compra foi concluida. Avalia esta loja"
+    : "Avaliacao disponivel apos a entrega";
+  const reviewSectionDescription = canReviewOrder
+    ? "Escolhe as estrelas e, se quiseres, deixa um comentario. Comentarios publicados podem aparecer para outros clientes como testemunho."
+    : reviewEligibility.reason;
+
+  async function handleReviewSubmit(event) {
+    event.preventDefault();
+    if (!reviewReadyToSubmit || !onSubmitReview || reviewBusy || !canReviewOrder) {
+      return;
+    }
+
+    await onSubmitReview(reviewRating, reviewComment);
+  }
 
   return (
     <div data-testid="tracking-page" style={{ minHeight: "100vh", background: "var(--color-background-secondary)", fontFamily: "var(--font-sans)" }}>
@@ -243,6 +318,145 @@ export default function OrderTrackingPage({ order, loading = false, error = "", 
             ))}
           </div>
         </div>
+
+        <form onSubmit={handleReviewSubmit} style={{ ...SURFACE_STYLE, padding: "20px", display: "grid", gap: "14px" }}>
+          <div style={{ display: "grid", gap: "6px" }}>
+            <div style={{ fontSize: "18px", fontWeight: "800", fontFamily: "var(--font-display)" }}>
+              {reviewSectionTitle}
+            </div>
+            <div style={{ fontSize: "13px", color: "var(--color-text-secondary)", lineHeight: 1.7 }}>
+              {reviewSectionDescription}
+            </div>
+          </div>
+
+          {!canReviewOrder ? (
+            <div style={{ padding: "14px 16px", borderRadius: "18px", background: "#eff6ff", border: "1px solid #bfdbfe", display: "grid", gap: "6px" }}>
+              <div style={{ fontSize: "12px", fontWeight: "800", color: "#1d4ed8" }}>
+                Aguarda a confirmacao final da entrega
+              </div>
+              <div style={{ fontSize: "13px", color: "#1d4ed8", lineHeight: 1.7 }}>
+                Assim que a loja marcar esta encomenda como entregue, este mesmo link fica pronto para receber a tua avaliacao.
+              </div>
+            </div>
+          ) : null}
+
+          <div style={{ display: "grid", gap: "10px" }}>
+            <div style={{ fontSize: "12px", fontWeight: "800", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-secondary)" }}>
+              Classificacao
+            </div>
+            <ReviewStars
+              value={reviewRating}
+              onChange={setReviewRating}
+              disabled={reviewBusy || !canReviewOrder}
+            />
+            <div style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
+              {reviewRating > 0
+                ? `${reviewRating} de 5 estrela${reviewRating === 1 ? "" : "s"}`
+                : "Ainda nao escolheste uma classificacao."}
+            </div>
+          </div>
+
+          <label style={{ display: "grid", gap: "8px" }}>
+            <span style={{ fontSize: "12px", fontWeight: "800", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-secondary)" }}>
+              Comentario
+            </span>
+            <textarea
+              value={reviewComment}
+              onChange={(event) => setReviewComment(event.target.value)}
+              maxLength={1200}
+              rows={4}
+              placeholder={
+                canReviewOrder
+                  ? "Conta a tua experiencia com o atendimento, rapidez e entrega."
+                  : "A avaliacao fica disponivel quando a encomenda for entregue."
+              }
+              disabled={reviewBusy || !canReviewOrder}
+              style={{
+                width: "100%",
+                minHeight: "120px",
+                resize: "vertical",
+                padding: "14px 16px",
+                borderRadius: "18px",
+                border: "1px solid var(--color-border-tertiary)",
+                background: "white",
+                color: "var(--color-text-primary)",
+                fontSize: "13px",
+                lineHeight: 1.6,
+                outline: "none",
+                fontFamily: "inherit",
+              }}
+            />
+          </label>
+
+          {review ? (
+            <div style={{ padding: "14px 16px", borderRadius: "18px", background: "var(--color-background-secondary)", display: "grid", gap: "6px" }}>
+              <div style={{ fontSize: "12px", fontWeight: "800", color: "var(--color-text-primary)" }}>
+                Avaliacao atual guardada
+              </div>
+              <div style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
+                {review.rating} estrela{review.rating === 1 ? "" : "s"}
+                {review.updatedAt ? ` · Atualizada em ${formatOrderDateTime(review.updatedAt)}` : ""}
+              </div>
+              {review.comment ? (
+                <div style={{ fontSize: "13px", color: "var(--color-text-secondary)", lineHeight: 1.7 }}>
+                  "{review.comment}"
+                </div>
+              ) : (
+                <div style={{ fontSize: "13px", color: "var(--color-text-secondary)", lineHeight: 1.7 }}>
+                  Guardaste a classificacao em estrelas. Podes acrescentar um comentario quando quiseres.
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          {hasSavedReview && !hasReviewChanges ? (
+            <div style={{ padding: "14px 16px", borderRadius: "18px", background: "#ecfdf5", border: "1px solid #bbf7d0", display: "grid", gap: "6px" }}>
+              <div style={{ fontSize: "12px", fontWeight: "800", color: "#166534" }}>
+                A tua avaliacao ja esta guardada
+              </div>
+              <div style={{ fontSize: "13px", color: "#166534", lineHeight: 1.7 }}>
+                Se quiseres mudar as estrelas ou o comentario, edita os campos acima e toca em atualizar.
+              </div>
+            </div>
+          ) : null}
+
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
+              {!canReviewOrder
+                ? reviewEligibility.reason
+                : hasSavedReview && !hasReviewChanges
+                ? "Avaliacao confirmada neste link."
+                : review
+                  ? "Podes atualizar a tua avaliacao sempre que precisares neste mesmo link."
+                  : "A tua opiniao ajuda a loja a melhorar e aumenta a confianca de novos clientes."}
+            </div>
+            <button
+              type="submit"
+              disabled={reviewBusy || !reviewReadyToSubmit}
+              style={{
+                padding: "12px 18px",
+                borderRadius: "16px",
+                border: "none",
+                background: store.color || "#1c9a74",
+                color: "white",
+                cursor: reviewBusy || !reviewReadyToSubmit ? "not-allowed" : "pointer",
+                fontSize: "13px",
+                fontWeight: "800",
+                opacity: reviewBusy || !reviewReadyToSubmit ? 0.68 : 1,
+              }}
+            >
+              {reviewBusy
+                ? "A guardar avaliacao..."
+                : !canReviewOrder
+                  ? "Aguarda entrega"
+                : hasSavedReview && !hasReviewChanges
+                  ? "Avaliacao guardada"
+                  : review
+                    ? "Atualizar avaliacao"
+                    : "Enviar avaliacao"}
+            </button>
+          </div>
+        </form>
 
         {store.whatsapp ? (
           <a href={`https://wa.me/${String(store.whatsapp).replace(/\D/g, "")}`} target="_blank" rel="noreferrer" style={{ ...SURFACE_STYLE, padding: "16px 18px", textDecoration: "none", color: "inherit", display: "inline-flex", alignItems: "center", gap: "8px", width: "fit-content" }}>

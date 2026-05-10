@@ -4,8 +4,6 @@ import { pathToFileURL } from "node:url";
 import { loadLocalEnv } from "./loadEnv.mjs";
 import { resolveFunctionNameFromPath, runFunctionByName } from "./functions-runtime.mjs";
 
-loadLocalEnv();
-
 function writeResponse(response, result) {
   response.statusCode = result?.statusCode || 200;
 
@@ -16,7 +14,9 @@ function writeResponse(response, result) {
   response.end(result?.body || "");
 }
 
-export function startDevFunctionsServer(port = Number(process.env.LOCAL_FUNCTIONS_PORT || 8888)) {
+export function startDevFunctionsServer(port, options = {}) {
+  loadLocalEnv(options.mode, options.cwd, options.loadEnvOptions);
+  const resolvedPort = Number(port || process.env.LOCAL_FUNCTIONS_PORT || 8888);
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host || "127.0.0.1"}`);
 
@@ -52,8 +52,8 @@ export function startDevFunctionsServer(port = Number(process.env.LOCAL_FUNCTION
   });
 
   return new Promise((resolve) => {
-    server.listen(port, () => {
-      console.log(`API local em http://127.0.0.1:${port}`);
+    server.listen(resolvedPort, () => {
+      console.log(`API local em http://127.0.0.1:${resolvedPort}`);
       resolve(server);
     });
   });

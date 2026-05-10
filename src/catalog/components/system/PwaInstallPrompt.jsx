@@ -121,7 +121,7 @@ export default function PwaInstallPrompt({ brand, screen }) {
       <button
         type="button"
         onClick={handleDismiss}
-        aria-label="Fechar instalacao"
+        aria-label="Fechar instalação"
         style={{
           position: "absolute",
           top: "10px",
@@ -150,8 +150,8 @@ export default function PwaInstallPrompt({ brand, screen }) {
         </div>
         <div style={{ fontSize: "13px", lineHeight: 1.65, opacity: 0.92 }}>
           {canPromptInstall
-            ? "Abre em 1 toque, com aspeto de app e acesso rapido a pedidos, loja e vitrine."
-            : "No iPhone, usa Partilhar -> Adicionar ao Ecran principal para instalar."}
+            ? "Abre em 1 toque, com aspeto de app e acesso rápido a pedidos, loja e vitrine."
+            : "No iPhone, usa Partilhar -> Adicionar ao Ecrã principal para instalar."}
         </div>
 
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "2px" }}>
@@ -188,7 +188,7 @@ export default function PwaInstallPrompt({ brand, screen }) {
                 gap: "6px",
               }}
             >
-              <Share2 size={14} /> Partilhar {"->"} Ecran principal
+              <Share2 size={14} /> Partilhar {"->"} Ecrã principal
             </div>
           )}
 

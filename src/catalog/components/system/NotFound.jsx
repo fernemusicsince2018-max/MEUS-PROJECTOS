@@ -39,10 +39,10 @@ export default function NotFound() {
           <Compass size={28} />
         </div>
         <div style={{ fontSize: "28px", fontFamily: "var(--font-display)", fontWeight: "800", letterSpacing: "-0.03em" }}>
-          Pagina ou loja nao encontrada
+          Página ou loja não encontrada
         </div>
         <div style={{ fontSize: "14px", lineHeight: 1.75, color: "var(--color-text-secondary)" }}>
-          O link pode ter expirado, estar incompleto ou apontar para uma rota que nao existe neste ambiente.
+          O link pode ter expirado, estar incompleto ou apontar para uma rota que não existe neste ambiente.
         </div>
         <div style={{ display: "flex", justifyContent: "center", gap: "10px", flexWrap: "wrap", marginTop: "4px" }}>
           <a
@@ -61,7 +61,7 @@ export default function NotFound() {
             }}
           >
             <Store size={14} />
-            Ir para a entrada publica
+            Ir para a entrada pública
           </a>
           <a
             href={buildAuthPath()}

@@ -141,7 +141,7 @@ async function sendPasswordResetEmail({ event, toEmail, resetLink }) {
     try {
       errorBody = await response.text();
     } catch (error) {}
-    throw new Error(errorBody || "Falha ao enviar o email de recuperacao.");
+    throw new Error(`Resend ${response.status}: ${errorBody || "Falha ao enviar o email de recuperacao."}`);
   }
 }
 
@@ -212,7 +212,7 @@ async function sendRegistrationApprovalEmail({ event, toEmail, fullName, storeNa
     try {
       errorBody = await response.text();
     } catch (error) {}
-    throw new Error(errorBody || "Falha ao enviar o email de aprovacao da loja.");
+    throw new Error(`Resend ${response.status}: ${errorBody || "Falha ao enviar o email de aprovacao da loja."}`);
   }
 }
 
@@ -270,7 +270,7 @@ async function sendPlanActivationEmail({ toEmail, storeName, planName, expiryDat
     try {
       errorBody = await response.text();
     } catch (error) {}
-    throw new Error(errorBody || "Falha ao enviar o email de ativacao do plano.");
+    throw new Error(`Resend ${response.status}: ${errorBody || "Falha ao enviar o email de ativacao do plano."}`);
   }
 }
 

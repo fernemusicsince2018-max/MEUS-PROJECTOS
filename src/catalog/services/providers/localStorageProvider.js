@@ -26,5 +26,15 @@ export function createLocalStorageProvider() {
       memoryStore.set(key, value);
       return { ok: true };
     },
+    async remove(key) {
+      const storage = getStorage();
+      if (storage) {
+        storage.removeItem(key);
+        return { ok: true };
+      }
+
+      memoryStore.delete(key);
+      return { ok: true };
+    },
   };
 }

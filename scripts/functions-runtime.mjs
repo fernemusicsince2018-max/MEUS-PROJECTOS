@@ -59,14 +59,27 @@ function buildEventFromRequest(request, rawBody) {
   };
 }
 
-function createFreshFunctionsWorkspace() {
-  const sourceDir = path.resolve("netlify/functions");
+export function createFreshFunctionsWorkspace() {
+  const sourceFunctionsDir = path.resolve("netlify/functions");
+  const sourceSharedDir = path.resolve("shared");
   const tempRoot = path.resolve(".netlify/functions-cache");
   fs.mkdirSync(tempRoot, { recursive: true });
-  const tempDir = fs.mkdtempSync(path.join(tempRoot, "run-"));
-  fs.cpSync(sourceDir, tempDir, { recursive: true });
-  fs.writeFileSync(path.join(tempDir, "package.json"), JSON.stringify({ type: "module" }));
-  return tempDir;
+  const workspaceDir = fs.mkdtempSync(path.join(tempRoot, "run-"));
+  const functionsDir = path.join(workspaceDir, "netlify", "functions");
+
+  fs.mkdirSync(path.dirname(functionsDir), { recursive: true });
+  fs.cpSync(sourceFunctionsDir, functionsDir, { recursive: true });
+
+  if (fs.existsSync(sourceSharedDir)) {
+    fs.cpSync(sourceSharedDir, path.join(workspaceDir, "shared"), { recursive: true });
+  }
+
+  fs.writeFileSync(path.join(workspaceDir, "package.json"), JSON.stringify({ type: "module" }));
+
+  return {
+    workspaceDir,
+    functionsDir,
+  };
 }
 
 export function resolveFunctionNameFromPath(pathname = "") {
@@ -91,15 +104,15 @@ export async function runFunctionByName(functionName, request, bodyChunks, optio
     };
   }
 
-  let tempDir = "";
+  let tempWorkspace = null;
 
   if (options.fresh) {
-    tempDir = createFreshFunctionsWorkspace();
+    tempWorkspace = createFreshFunctionsWorkspace();
   }
 
   try {
     const sourceFunctionPath = options.fresh
-      ? path.join(tempDir, `${normalizedFunctionName}.js`)
+      ? path.join(tempWorkspace.functionsDir, `${normalizedFunctionName}.js`)
       : path.resolve("netlify/functions", `${normalizedFunctionName}.js`);
 
     if (!fs.existsSync(sourceFunctionPath)) {
@@ -126,8 +139,8 @@ export async function runFunctionByName(functionName, request, bodyChunks, optio
 
     return mod.handler(buildEventFromRequest(request, rawBody));
   } finally {
-    if (tempDir) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+    if (tempWorkspace?.workspaceDir) {
+      fs.rmSync(tempWorkspace.workspaceDir, { recursive: true, force: true });
     }
   }
 }

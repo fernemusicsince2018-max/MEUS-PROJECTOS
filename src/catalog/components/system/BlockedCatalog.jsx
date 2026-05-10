@@ -21,7 +21,7 @@ function getPlanStatusMeta(planStatus, planExpiresAt) {
   if (normalizedStatus === "active" && expired) {
     return {
       label: "Plano expirado",
-      detail: "A vitrine publica volta assim que a loja renovar o acesso.",
+      detail: "A vitrine pública volta assim que a loja renovar o acesso.",
       toneBg: "rgba(254, 242, 242, 0.92)",
       toneColor: "#991b1b",
     };
@@ -39,7 +39,7 @@ function getPlanStatusMeta(planStatus, planExpiresAt) {
   if (normalizedStatus === "past_due") {
     return {
       label: "Pagamento em atraso",
-      detail: "O catalogo publico foi pausado ate a regularizacao do plano.",
+      detail: "O catálogo público foi pausado até à regularização do plano.",
       toneBg: "rgba(255, 247, 237, 0.92)",
       toneColor: "#c2410c",
     };
@@ -56,7 +56,7 @@ function getPlanStatusMeta(planStatus, planExpiresAt) {
 
   return {
     label: "Plano inativo",
-    detail: "A loja esta a ajustar o acesso comercial antes de voltar a abrir o catalogo.",
+    detail: "A loja está a ajustar o acesso comercial antes de voltar a abrir o catálogo.",
     toneBg: "rgba(239, 246, 255, 0.92)",
     toneColor: "#1d4ed8",
   };
@@ -92,8 +92,8 @@ export default function BlockedCatalog({
   const accent = store?.color || platformBrand?.accent || STORE_DEFAULTS.color;
   const dark = platformBrand?.dark || "#0c2522";
   const highlight = platformBrand?.highlight || "#f0c978";
-  const storeName = store?.name || "Loja temporariamente indisponivel";
-  const storeDescription = store?.description || "Esta vitrine esta a passar por um ajuste comercial e voltara a abrir em breve.";
+  const storeName = store?.name || "Loja temporariamente indisponível";
+  const storeDescription = store?.description || "Esta vitrine está a passar por um ajuste comercial e voltará a abrir em breve.";
   const planMeta = getPlanStatusMeta(planStatus, planExpiresAt);
   const expiryLabel = formatDateLabel(planExpiresAt);
   const whatsappHref = buildWhatsAppHref(store?.whatsapp);
@@ -153,19 +153,19 @@ export default function BlockedCatalog({
           >
             <div style={{ display: "inline-flex", alignItems: "center", gap: "10px", padding: "8px 14px", borderRadius: "999px", background: "rgba(255,255,255,0.12)", fontSize: "11px", fontWeight: "800", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "18px" }}>
               <BrandMark brand={platformBrand} size={30} rounded={10} />
-              {platformBrand?.name || "Catalogo"}
+              {platformBrand?.name || "Catálogo"}
             </div>
 
             <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "9px 14px", borderRadius: "999px", background: "rgba(127, 29, 29, 0.26)", color: "#fecaca", fontSize: "12px", fontWeight: "800", marginBottom: "16px" }}>
-              <ShieldAlert size={14} /> Loja temporariamente indisponivel por plano inativo
+              <ShieldAlert size={14} /> Loja temporariamente indisponível por plano inativo
             </div>
 
             <div style={{ fontSize: "38px", lineHeight: 1.02, fontWeight: "800", fontFamily: "var(--font-display)", maxWidth: "560px" }}>
-              A vitrine desta loja esta em pausa enquanto o plano comercial e reativado.
+              A vitrine desta loja está em pausa enquanto o plano comercial é reativado.
             </div>
 
             <div style={{ marginTop: "14px", fontSize: "15px", lineHeight: 1.7, color: "rgba(255,255,255,0.82)", maxWidth: "560px" }}>
-              {message || "Esta loja esta temporariamente indisponivel para clientes porque o plano nao esta ativo."}
+              {message || "Esta loja está temporariamente indisponível para clientes porque o plano não está ativo."}
             </div>
 
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "22px" }}>
@@ -186,7 +186,7 @@ export default function BlockedCatalog({
                   boxShadow: "0 14px 34px rgba(0,0,0,0.18)",
                 }}
               >
-                <RefreshCw size={15} /> Atualizar pagina
+                <RefreshCw size={15} /> Atualizar página
               </button>
 
               {whatsappHref ? (
@@ -223,7 +223,7 @@ export default function BlockedCatalog({
                 <div style={{ fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.72, marginBottom: "6px" }}>Mensagem</div>
                 <div style={{ fontSize: "16px", fontWeight: "800", fontFamily: "var(--font-display)" }}>Volta em breve</div>
                 <div style={{ fontSize: "12px", opacity: 0.82, marginTop: "4px" }}>
-                  O atendimento da loja continua fora da vitrine ate o plano voltar a ficar ativo.
+                  O atendimento da loja continua fora da vitrine até o plano voltar a ficar ativo.
                 </div>
               </div>
             </div>
@@ -259,7 +259,7 @@ export default function BlockedCatalog({
                   <div style={{ fontSize: "13px", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-secondary)", fontWeight: "800" }}>Identidade da loja</div>
                   <div style={{ fontSize: "28px", lineHeight: 1.04, fontWeight: "800", fontFamily: "var(--font-display)", marginTop: "4px" }}>{storeName}</div>
                   <div style={{ marginTop: "8px", display: "inline-flex", alignItems: "center", gap: "6px", padding: "7px 12px", borderRadius: "999px", background: "rgba(255,255,255,0.7)", fontSize: "12px", color: "var(--color-text-secondary)", fontWeight: "700" }}>
-                    <Store size={13} /> Vitrine publica pausada
+                    <Store size={13} /> Vitrine pública pausada
                   </div>
                 </div>
               </div>
@@ -271,16 +271,16 @@ export default function BlockedCatalog({
 
             <div style={{ display: "grid", gap: "12px" }}>
               <div style={{ padding: "16px 18px", borderRadius: "22px", background: "var(--color-background-secondary)", border: "1px solid var(--color-border-tertiary)" }}>
-                <div style={{ fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-secondary)", fontWeight: "800", marginBottom: "6px" }}>O que esta a acontecer</div>
+                <div style={{ fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-secondary)", fontWeight: "800", marginBottom: "6px" }}>O que está a acontecer</div>
                 <div style={{ fontSize: "14px", lineHeight: 1.7, color: "var(--color-text-primary)" }}>
-                  O catalogo deixou de aceitar visitas publicas enquanto a loja regulariza o acesso do plano. Assim que a conta voltar a ficar ativa, a vitrine reaparece automaticamente.
+                  O catálogo deixou de aceitar visitas públicas enquanto a loja regulariza o acesso do plano. Assim que a conta voltar a ficar ativa, a vitrine reaparece automaticamente.
                 </div>
               </div>
 
               <div style={{ padding: "16px 18px", borderRadius: "22px", background: "rgba(16, 35, 31, 0.04)", border: "1px solid rgba(16,35,31,0.08)" }}>
                 <div style={{ fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-secondary)", fontWeight: "800", marginBottom: "6px" }}>Enquanto isso</div>
                 <div style={{ fontSize: "14px", lineHeight: 1.7, color: "var(--color-text-secondary)" }}>
-                  Guarda este link e volta a tentar daqui a pouco. Se a loja tiver atendimento manual ativo, o contacto direto por WhatsApp tambem pode continuar disponivel.
+                  Guarda este link e volta a tentar daqui a pouco. Se a loja tiver atendimento manual ativo, o contacto direto por WhatsApp também pode continuar disponível.
                 </div>
               </div>
             </div>

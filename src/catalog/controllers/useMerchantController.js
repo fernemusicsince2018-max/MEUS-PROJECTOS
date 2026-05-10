@@ -1,11 +1,81 @@
 import { useEffect, useRef, useState } from "react";
 import { STORE_DEFAULTS } from "../constants.js";
-import { normalizeProduct, normalizeProducts, normalizeStore } from "../utils/catalog.js";
+import {
+  normalizeProduct,
+  normalizeProducts,
+  normalizeStore,
+  resolveMerchantPlanSnapshot,
+} from "../utils/catalog.js";
+import { buildBeautyStarterCatalog, shouldHydrateBeautyStarterCatalog } from "../utils/starterCatalog.js";
 import { buildMerchantOrderSummary, EMPTY_MERCHANT_ORDER_SUMMARY } from "../../../shared/orderAnalytics.js";
 import { EMPTY_MERCHANT_ORDERS_PAGE_INFO } from "../../../shared/merchantOrdersPagination.js";
+import {
+  STORE_REVIEW_PAGE_LIMIT,
+  STORE_REVIEW_PAGE_MAX_LIMIT,
+} from "../../../shared/storeReviews.js";
 import { EMPTY_MERCHANT_PLAN_CATALOG } from "./controllerState.js";
 
 const ORDERS_PAGE_SIZE = EMPTY_MERCHANT_ORDERS_PAGE_INFO.limit;
+const EMPTY_MERCHANT_REVIEWS_PAGE_INFO = Object.freeze({
+  total: 0,
+  limit: STORE_REVIEW_PAGE_LIMIT,
+  offset: 0,
+  hasMore: false,
+  nextOffset: 0,
+});
+const REVIEWS_PAGE_SIZE = EMPTY_MERCHANT_REVIEWS_PAGE_INFO.limit;
+export const MERCHANT_REVIEWS_AUTO_REFRESH_MS = 60 * 1000;
+
+export function resolveMerchantReviewsRefreshLimit(pageInfo = {}, loadedReviews = []) {
+  const visibleCount = Array.isArray(loadedReviews)
+    ? loadedReviews.length
+    : Math.max(0, Math.floor(Number(loadedReviews || 0) || 0));
+  const currentLimit = Math.max(0, Math.floor(Number(pageInfo?.limit || 0) || 0));
+  const nextOffset = Math.max(0, Math.floor(Number(pageInfo?.nextOffset || 0) || 0));
+
+  return Math.max(
+    1,
+    Math.min(
+      STORE_REVIEW_PAGE_MAX_LIMIT,
+      Math.max(REVIEWS_PAGE_SIZE, currentLimit, nextOffset, visibleCount),
+    ),
+  );
+}
+
+export function mergeRefreshedMerchantReviews(
+  refreshedReviews = [],
+  existingReviews = [],
+  totalAvailable = null,
+) {
+  const safeRefreshedReviews = Array.isArray(refreshedReviews) ? refreshedReviews : [];
+  const safeExistingReviews = Array.isArray(existingReviews) ? existingReviews : [];
+  const baseTargetLength = Math.max(
+    safeRefreshedReviews.length,
+    safeExistingReviews.length,
+  );
+  const parsedTotal = Number(totalAvailable);
+  const hasKnownTotal = Number.isFinite(parsedTotal) && parsedTotal >= 0;
+  const targetLength = hasKnownTotal
+    ? Math.min(baseTargetLength, Math.floor(parsedTotal))
+    : baseTargetLength;
+  const mergedReviews = [];
+  const seenReviewIds = new Set();
+
+  for (const review of safeRefreshedReviews) {
+    if (!review?.id || seenReviewIds.has(review.id)) continue;
+    seenReviewIds.add(review.id);
+    mergedReviews.push(review);
+  }
+
+  for (const review of safeExistingReviews) {
+    if (mergedReviews.length >= targetLength) break;
+    if (!review?.id || seenReviewIds.has(review.id)) continue;
+    seenReviewIds.add(review.id);
+    mergedReviews.push(review);
+  }
+
+  return mergedReviews.slice(0, targetLength || safeRefreshedReviews.length);
+}
 
 function createLocalProductId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -80,6 +150,7 @@ export function useMerchantController({
   orderService,
   catalogStorage,
   session,
+  setSession,
   sessionRef,
   screen,
   handleUnauthorizedSession,
@@ -89,15 +160,22 @@ export function useMerchantController({
   const [store, setStore] = useState(STORE_DEFAULTS);
   const [prods, setProds] = useState([]);
   const [sid, setSid] = useState("");
-  const [tab, setTab] = useState("loja");
+  const [tab, setTab] = useState("inicio");
   const [modal, setModal] = useState(null);
   const [orders, setOrders] = useState([]);
   const [ordersSummary, setOrdersSummary] = useState(EMPTY_MERCHANT_ORDER_SUMMARY);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersPageInfo, setOrdersPageInfo] = useState(EMPTY_MERCHANT_ORDERS_PAGE_INFO);
   const [ordersLoadingMore, setOrdersLoadingMore] = useState(false);
+  const [merchantReviews, setMerchantReviews] = useState([]);
+  const [merchantReviewsLoading, setMerchantReviewsLoading] = useState(false);
+  const [merchantReviewsPageInfo, setMerchantReviewsPageInfo] = useState(
+    EMPTY_MERCHANT_REVIEWS_PAGE_INFO,
+  );
+  const [merchantReviewsLoadingMore, setMerchantReviewsLoadingMore] = useState(false);
   const [busyOrderId, setBusyOrderId] = useState("");
   const [busyCustomerKey, setBusyCustomerKey] = useState("");
+  const [busyReviewId, setBusyReviewId] = useState("");
   const [merchantPlanCatalog, setMerchantPlanCatalog] = useState(EMPTY_MERCHANT_PLAN_CATALOG);
   const [merchantPlanCatalogStoreId, setMerchantPlanCatalogStoreId] = useState("");
   const [merchantPlanCatalogLoading, setMerchantPlanCatalogLoading] = useState(false);
@@ -105,6 +183,9 @@ export function useMerchantController({
   const ordersRef = useRef([]);
   const ordersSummaryRef = useRef(EMPTY_MERCHANT_ORDER_SUMMARY);
   const ordersPageInfoRef = useRef(EMPTY_MERCHANT_ORDERS_PAGE_INFO);
+  const merchantReviewsRef = useRef([]);
+  const merchantReviewsPageInfoRef = useRef(EMPTY_MERCHANT_REVIEWS_PAGE_INFO);
+  const merchantReviewsRefreshInFlightRef = useRef(false);
 
   useEffect(() => {
     ordersRef.current = orders;
@@ -117,6 +198,14 @@ export function useMerchantController({
   useEffect(() => {
     ordersPageInfoRef.current = ordersPageInfo;
   }, [ordersPageInfo]);
+
+  useEffect(() => {
+    merchantReviewsRef.current = merchantReviews;
+  }, [merchantReviews]);
+
+  useEffect(() => {
+    merchantReviewsPageInfoRef.current = merchantReviewsPageInfo;
+  }, [merchantReviewsPageInfo]);
 
   function applyMerchantOrdersState(nextOrders, nextSummary = null, nextPageInfo = null) {
     const safeOrders = Array.isArray(nextOrders) ? nextOrders : [];
@@ -136,17 +225,46 @@ export function useMerchantController({
     setOrdersPageInfo(safePageInfo);
   }
 
+  function applyMerchantInsightsState(nextSummary = null) {
+    const safeSummary =
+      nextSummary
+      || ordersSummaryRef.current
+      || EMPTY_MERCHANT_ORDER_SUMMARY;
+
+    ordersSummaryRef.current = safeSummary;
+    setOrdersSummary(safeSummary);
+  }
+
+  function applyMerchantReviewsState(nextReviews, nextPageInfo = null) {
+    const safeReviews = Array.isArray(nextReviews) ? nextReviews : [];
+    const safePageInfo =
+      nextPageInfo
+      || merchantReviewsPageInfoRef.current
+      || EMPTY_MERCHANT_REVIEWS_PAGE_INFO;
+    merchantReviewsRef.current = safeReviews;
+    merchantReviewsPageInfoRef.current = safePageInfo;
+    setMerchantReviews(safeReviews);
+    setMerchantReviewsPageInfo(safePageInfo);
+  }
+
   function resetMerchantSessionState() {
     ordersRef.current = [];
     ordersSummaryRef.current = EMPTY_MERCHANT_ORDER_SUMMARY;
     ordersPageInfoRef.current = EMPTY_MERCHANT_ORDERS_PAGE_INFO;
+    merchantReviewsRef.current = [];
+    merchantReviewsPageInfoRef.current = EMPTY_MERCHANT_REVIEWS_PAGE_INFO;
     setOrders([]);
     setOrdersSummary(EMPTY_MERCHANT_ORDER_SUMMARY);
     setOrdersPageInfo(EMPTY_MERCHANT_ORDERS_PAGE_INFO);
     setOrdersLoading(false);
     setOrdersLoadingMore(false);
+    setMerchantReviews([]);
+    setMerchantReviewsPageInfo(EMPTY_MERCHANT_REVIEWS_PAGE_INFO);
+    setMerchantReviewsLoading(false);
+    setMerchantReviewsLoadingMore(false);
     setBusyOrderId("");
     setBusyCustomerKey("");
+    setBusyReviewId("");
     setMerchantPlanCatalog(EMPTY_MERCHANT_PLAN_CATALOG);
     setMerchantPlanCatalogStoreId("");
     setMerchantPlanCatalogLoading(false);
@@ -158,7 +276,7 @@ export function useMerchantController({
     setStore(STORE_DEFAULTS);
     setProds([]);
     setSid("");
-    setTab("loja");
+    setTab("inicio");
     setModal(null);
   }
 
@@ -173,6 +291,56 @@ export function useMerchantController({
     setProds([]);
   }
 
+  function applyReviewsOverviewToStore(reviewsOverview) {
+    if (!reviewsOverview) return;
+
+    setStore((current) =>
+      normalizeStore({
+        ...current,
+        reviewSummary: reviewsOverview.reviewSummary,
+        testimonials: reviewsOverview.testimonials,
+        featuredTestimonials: reviewsOverview.featuredTestimonials,
+        recentTestimonials: reviewsOverview.recentTestimonials,
+      }),
+    );
+  }
+
+  function syncSessionWithPlanCatalogStore(nextPlanStore, activeSession = sessionRef.current || session) {
+    if (typeof setSession !== "function" || !nextPlanStore || !activeSession) {
+      return;
+    }
+
+    setSession((current) => {
+      const baseSession = current || activeSession;
+      if (!baseSession) {
+        return current;
+      }
+
+      const resolvedPlanSnapshot = resolveMerchantPlanSnapshot(baseSession, nextPlanStore);
+      const nextStoreName = resolvedPlanSnapshot.storeName || baseSession.storeName || "";
+      const nextReferenceId = resolvedPlanSnapshot.referenceId || baseSession.referenceId || "";
+      const nextPlanStatus = resolvedPlanSnapshot.planStatus || null;
+      const nextPlanExpiresAt = resolvedPlanSnapshot.planExpiresAt || null;
+
+      if (
+        baseSession.storeName === nextStoreName
+        && (baseSession.referenceId || "") === nextReferenceId
+        && (baseSession.planStatus || null) === nextPlanStatus
+        && (baseSession.planExpiresAt || null) === nextPlanExpiresAt
+      ) {
+        return current;
+      }
+
+      return {
+        ...baseSession,
+        storeName: nextStoreName,
+        referenceId: nextReferenceId,
+        planStatus: nextPlanStatus,
+        planExpiresAt: nextPlanExpiresAt,
+      };
+    });
+  }
+
   async function loadCatalogState(id, options = {}) {
     const { admin = false } = options;
     setSid(id);
@@ -182,18 +350,79 @@ export function useMerchantController({
       if (response) {
         updateSyncStatusFromResponse(response, admin ? "catalogo_admin" : "catalogo_publico");
         const data = JSON.parse(response.value);
-        replaceCatalogState(data.s || {}, data.p || [], id);
+        const normalizedStore = normalizeStore(data.s || {});
+        const normalizedProducts = normalizeProducts(data.p || []);
+
+        if (shouldHydrateBeautyStarterCatalog(normalizedStore, normalizedProducts)) {
+          const starterCatalog = buildBeautyStarterCatalog(normalizedStore, {
+            storeName: sessionRef.current?.storeName || session?.storeName || normalizedStore.name,
+          });
+
+          try {
+            const starterResponse = await catalogStorage.set(
+              `cat:${id}`,
+              JSON.stringify({
+                s: starterCatalog.store,
+                p: starterCatalog.products,
+              }),
+            );
+            updateSyncStatusFromResponse(starterResponse, admin ? "catalogo_admin" : "catalogo_publico");
+            const savedStarterStore = normalizeStore(starterResponse?.store || starterCatalog.store);
+            const savedStarterProducts = normalizeProducts(starterResponse?.products || starterCatalog.products);
+            replaceCatalogState(savedStarterStore, savedStarterProducts, id);
+            return {
+              store: savedStarterStore,
+              products: savedStarterProducts,
+            };
+          } catch (error) {
+            replaceCatalogState(starterCatalog.store, starterCatalog.products, id);
+            return {
+              store: normalizeStore(starterCatalog.store),
+              products: normalizeProducts(starterCatalog.products),
+            };
+          }
+        }
+
+        replaceCatalogState(normalizedStore, normalizedProducts, id);
         return {
-          store: normalizeStore(data.s || {}),
-          products: normalizeProducts(data.p || []),
+          store: normalizedStore,
+          products: normalizedProducts,
         };
       }
 
-      clearCatalogState();
-      return {
-        store: STORE_DEFAULTS,
-        products: [],
-      };
+      const starterCatalog = buildBeautyStarterCatalog(
+        {
+          ...STORE_DEFAULTS,
+          name: sessionRef.current?.storeName || session?.storeName || STORE_DEFAULTS.name,
+        },
+        {
+          storeName: sessionRef.current?.storeName || session?.storeName || STORE_DEFAULTS.name,
+        },
+      );
+
+      try {
+        const starterResponse = await catalogStorage.set(
+          `cat:${id}`,
+          JSON.stringify({
+            s: starterCatalog.store,
+            p: starterCatalog.products,
+          }),
+        );
+        updateSyncStatusFromResponse(starterResponse, admin ? "catalogo_admin" : "catalogo_publico");
+        const savedStarterStore = normalizeStore(starterResponse?.store || starterCatalog.store);
+        const savedStarterProducts = normalizeProducts(starterResponse?.products || starterCatalog.products);
+        replaceCatalogState(savedStarterStore, savedStarterProducts, id);
+        return {
+          store: savedStarterStore,
+          products: savedStarterProducts,
+        };
+      } catch (error) {
+        replaceCatalogState(starterCatalog.store, starterCatalog.products, id);
+        return {
+          store: normalizeStore(starterCatalog.store),
+          products: normalizeProducts(starterCatalog.products),
+        };
+      }
     } catch (error) {
       clearCatalogState();
       throw error;
@@ -215,11 +444,100 @@ export function useMerchantController({
       cursor: options.cursor || "",
     });
     updateSyncStatusFromResponse(response, "pedidos");
+    applyReviewsOverviewToStore(response?.reviewsOverview || null);
     return {
       orders: Array.isArray(response?.orders) ? response.orders : [],
       summary: response?.summary || null,
       pageInfo: response?.pageInfo || EMPTY_MERCHANT_ORDERS_PAGE_INFO,
+      reviewsOverview: response?.reviewsOverview || null,
     };
+  }
+
+  async function loadMerchantReviews(storeId = sid || session?.storeId || "", options = {}) {
+    const activeStoreId = String(storeId || "").trim();
+    if (!activeStoreId) {
+      return {
+        reviews: [],
+        pageInfo: EMPTY_MERCHANT_REVIEWS_PAGE_INFO,
+        reviewsOverview: null,
+      };
+    }
+
+    const response = await orderService.getMerchantReviews(activeStoreId, {
+      limit: options.limit || merchantReviewsPageInfoRef.current?.limit || REVIEWS_PAGE_SIZE,
+      offset: options.offset || 0,
+    });
+    updateSyncStatusFromResponse(response, "avaliacoes");
+    applyReviewsOverviewToStore(response?.reviewsOverview || null);
+    return {
+      reviews: Array.isArray(response?.reviews) ? response.reviews : [],
+      pageInfo: response?.pageInfo || EMPTY_MERCHANT_REVIEWS_PAGE_INFO,
+      reviewsOverview: response?.reviewsOverview || null,
+    };
+  }
+
+  async function refreshMerchantReviews(options = {}) {
+    const preserveVisibleCount = options.preserveVisibleCount !== false;
+    const silent = options.silent === true;
+    const requestedLimit =
+      options.limit
+      || (preserveVisibleCount
+        ? resolveMerchantReviewsRefreshLimit(
+          merchantReviewsPageInfoRef.current,
+          merchantReviewsRef.current,
+        )
+        : merchantReviewsPageInfoRef.current?.limit || REVIEWS_PAGE_SIZE);
+
+    if (merchantReviewsRefreshInFlightRef.current) {
+      return null;
+    }
+
+    merchantReviewsRefreshInFlightRef.current = true;
+
+    if (!silent) {
+      setMerchantReviewsLoading(true);
+      setMerchantReviewsLoadingMore(false);
+    }
+
+    try {
+      const nextReviews = await loadMerchantReviews("", {
+        limit: requestedLimit,
+        offset: 0,
+      });
+      const mergedReviews = mergeRefreshedMerchantReviews(
+        nextReviews.reviews,
+        merchantReviewsRef.current,
+        nextReviews.pageInfo?.total,
+      );
+      applyMerchantReviewsState(mergedReviews, {
+        ...(nextReviews.pageInfo || EMPTY_MERCHANT_REVIEWS_PAGE_INFO),
+        offset: 0,
+        hasMore: mergedReviews.length < Math.max(0, Number(nextReviews.pageInfo?.total || 0)),
+        nextOffset: mergedReviews.length,
+      });
+
+      if (!silent) {
+        showToast("Lista de avaliacoes atualizada.");
+      }
+
+      return nextReviews;
+    } catch (error) {
+      if (error.status === 401 || error.status === 403) {
+        handleUnauthorizedSession();
+      }
+
+      if (!silent) {
+        showToast(error.message || "Não foi possível carregar as avaliações.");
+      }
+
+      throw error;
+    } finally {
+      merchantReviewsRefreshInFlightRef.current = false;
+
+      if (!silent) {
+        setMerchantReviewsLoading(false);
+      }
+    }
   }
 
   async function loadMerchantPlanOptions(options = {}) {
@@ -239,19 +557,21 @@ export function useMerchantController({
 
     try {
       const response = await authService.getMerchantPlanOptions();
-      setMerchantPlanCatalog({
+      const nextPlanCatalog = {
         store: {
           ...EMPTY_MERCHANT_PLAN_CATALOG.store,
           ...(response?.store || {}),
         },
         activeRequest: response?.activeRequest || null,
         plans: Array.isArray(response?.plans) ? response.plans : [],
-      });
+      };
+      setMerchantPlanCatalog(nextPlanCatalog);
+      syncSessionWithPlanCatalogStore(nextPlanCatalog.store, activeSession);
       return response;
     } catch (error) {
-      setMerchantPlanCatalogError(error.message || "Nao foi possivel carregar os planos disponiveis.");
+      setMerchantPlanCatalogError(error.message || "Não foi possível carregar os planos disponíveis.");
       if (!silent) {
-        showToast(error.message || "Nao foi possivel carregar os planos disponiveis.");
+        showToast(error.message || "Não foi possível carregar os planos disponíveis.");
       }
       throw error;
     } finally {
@@ -301,7 +621,7 @@ export function useMerchantController({
       showToast("Loja salva com sucesso.");
     } catch (error) {
       setStore(previousStore);
-      showToast(error.message || "Nao foi possivel guardar a loja.");
+      showToast(error.message || "Não foi possível guardar a loja.");
       throw error;
     }
   }
@@ -337,7 +657,7 @@ export function useMerchantController({
       showToast(`${normalized.id ? "Produto atualizado" : "Produto adicionado"}${savedImagesCount ? ` com ${savedImagesCount} foto${savedImagesCount === 1 ? "" : "s"}` : ""}.`);
     } catch (error) {
       setProds(previousProducts);
-      showToast(error.message || "Nao foi possivel guardar o produto.");
+      showToast(error.message || "Não foi possível guardar o produto.");
     }
   }
 
@@ -351,7 +671,7 @@ export function useMerchantController({
       showToast("Produto removido.");
     } catch (error) {
       setProds(previousProducts);
-      showToast(error.message || "Nao foi possivel remover o produto.");
+      showToast(error.message || "Não foi possível remover o produto.");
     }
   }
 
@@ -363,11 +683,13 @@ export function useMerchantController({
       if (response?.blockedPlanSelection) {
         showToast(
           response?.locked
-            ? "Ja tens um pedido em analise. Usa o painel do pagamento para acompanhar ou falar com o suporte."
-            : "Ja tens um pedido de plano em aberto. Primeiro conclui esse pagamento ou fala com o suporte.",
+            ? "Já tens um pedido em análise. Usa o painel do pagamento para acompanhar ou falar com o suporte."
+            : "Já tens um pedido de plano em aberto. Primeiro conclui esse pagamento ou fala com o suporte.",
         );
+      } else if (response?.replacedExisting) {
+        showToast("Atualizamos o pedido antigo para o novo plano/preco e abrimos o pagamento certo.");
       } else if (response?.duplicate) {
-        showToast("Ja existia um pedido deste plano. Abrimos o painel do pagamento para continuares.");
+        showToast("Já existia um pedido deste plano. Abrimos o painel do pagamento para continuares.");
       } else {
         showToast("Pedido de plano criado. Segue os dados de pagamento e envia o comprovativo no painel.");
       }
@@ -377,7 +699,7 @@ export function useMerchantController({
       if (error.status === 401 || error.status === 403) {
         handleUnauthorizedSession();
       }
-      showToast(error.message || "Nao foi possivel registar o pedido de ativacao.");
+      showToast(error.message || "Não foi possível registar o pedido de ativação.");
       throw error;
     }
   }
@@ -392,7 +714,7 @@ export function useMerchantController({
       if (error.status === 401 || error.status === 403) {
         handleUnauthorizedSession();
       }
-      showToast(error.message || "Nao foi possivel enviar o comprovativo do plano.");
+      showToast(error.message || "Não foi possível enviar o comprovativo do plano.");
       throw error;
     }
   }
@@ -411,7 +733,7 @@ export function useMerchantController({
       if (error.status === 401 || error.status === 403) {
         handleUnauthorizedSession();
       }
-      showToast(error.message || "Nao foi possivel carregar as encomendas.");
+      showToast(error.message || "Não foi possível carregar as encomendas.");
     } finally {
       setOrdersLoading(false);
     }
@@ -444,9 +766,50 @@ export function useMerchantController({
       if (error.status === 401 || error.status === 403) {
         handleUnauthorizedSession();
       }
-      showToast(error.message || "Nao foi possivel carregar mais encomendas.");
+      showToast(error.message || "Não foi possível carregar mais encomendas.");
     } finally {
       setOrdersLoadingMore(false);
+    }
+  }
+
+  async function handleMerchantReviewsRefresh() {
+    try {
+      await refreshMerchantReviews({
+        silent: false,
+        preserveVisibleCount: true,
+      });
+    } catch (error) {
+      // O feedback já foi tratado dentro do refresh.
+    }
+  }
+
+  async function handleMerchantReviewsLoadMore() {
+    const currentPageInfo =
+      merchantReviewsPageInfoRef.current || EMPTY_MERCHANT_REVIEWS_PAGE_INFO;
+    if (!currentPageInfo.hasMore) {
+      return;
+    }
+
+    setMerchantReviewsLoadingMore(true);
+
+    try {
+      const nextReviewsPage = await loadMerchantReviews("", {
+        limit: currentPageInfo.limit || REVIEWS_PAGE_SIZE,
+        offset: currentPageInfo.nextOffset || 0,
+      });
+      const seenReviewIds = new Set(merchantReviewsRef.current.map((review) => review.id));
+      const mergedReviews = [
+        ...merchantReviewsRef.current,
+        ...nextReviewsPage.reviews.filter((review) => !seenReviewIds.has(review.id)),
+      ];
+      applyMerchantReviewsState(mergedReviews, nextReviewsPage.pageInfo);
+    } catch (error) {
+      if (error.status === 401 || error.status === 403) {
+        handleUnauthorizedSession();
+      }
+      showToast(error.message || "Não foi possível carregar mais avaliações.");
+    } finally {
+      setMerchantReviewsLoadingMore(false);
     }
   }
 
@@ -476,7 +839,7 @@ export function useMerchantController({
       if (error.status === 401 || error.status === 403) {
         handleUnauthorizedSession();
       }
-      showToast(error.message || "Nao foi possivel atualizar o estado da encomenda.");
+      showToast(error.message || "Não foi possível atualizar o estado da encomenda.");
     } finally {
       setBusyOrderId("");
     }
@@ -515,9 +878,63 @@ export function useMerchantController({
       if (error.status === 401 || error.status === 403) {
         handleUnauthorizedSession();
       }
-      showToast(error.message || "Nao foi possivel guardar o desconto do cliente.");
+      showToast(error.message || "Não foi possível guardar o desconto do cliente.");
     } finally {
       setBusyCustomerKey("");
+    }
+  }
+
+  async function handleStoreReviewFeatureToggle(reviewId, featured) {
+    const activeReviewId = String(reviewId || "").trim();
+    if (!activeReviewId) {
+      return;
+    }
+
+    setBusyReviewId(activeReviewId);
+
+    try {
+      const response = await orderService.updateMerchantStoreReviewFeature({
+        reviewId: activeReviewId,
+        featured,
+        storeId: sid || session?.storeId || "",
+      });
+      applyReviewsOverviewToStore(response?.reviewsOverview || null);
+
+      if (response?.review?.id) {
+        const nextReviews = merchantReviewsRef.current.map((review) =>
+          review?.id === response.review.id
+            ? {
+              ...review,
+              ...response.review,
+            }
+            : review,
+        );
+        applyMerchantReviewsState(nextReviews, merchantReviewsPageInfoRef.current);
+
+        const nextOrders = ordersRef.current.map((order) => {
+          if (order?.review?.id !== response.review.id) {
+            return order;
+          }
+
+          return {
+            ...order,
+            review: {
+              ...(order.review || {}),
+              ...response.review,
+            },
+          };
+        });
+        applyMerchantOrdersState(nextOrders, ordersSummaryRef.current, ordersPageInfoRef.current);
+      }
+
+      showToast(featured ? "Testemunho fixado na vitrine." : "Testemunho removido dos destaques.");
+    } catch (error) {
+      if (error.status === 401 || error.status === 403) {
+        handleUnauthorizedSession();
+      }
+      showToast(error.message || "Não foi possível atualizar este testemunho.");
+    } finally {
+      setBusyReviewId("");
     }
   }
 
@@ -554,17 +971,124 @@ export function useMerchantController({
 
     (async () => {
       try {
-        const nextOrders = await loadMerchantOrders("", { limit: ORDERS_PAGE_SIZE, cursor: "" });
+        const nextOrders = await loadMerchantOrders("", {
+          limit: tab === "avaliacoes" ? 100 : ORDERS_PAGE_SIZE,
+          cursor: "",
+        });
         if (!cancelled) {
           applyMerchantOrdersState(nextOrders.orders, nextOrders.summary, nextOrders.pageInfo);
         }
       } catch (error) {
         if (!cancelled) {
-          showToast(error.message || "Nao foi possivel carregar as encomendas.");
+          showToast(error.message || "Não foi possível carregar as encomendas.");
         }
       } finally {
         if (!cancelled) {
           setOrdersLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [screen, tab, sid, session?.storeId]);
+
+  useEffect(() => {
+    if (screen !== "admin" || tab !== "avaliacoes" || !(sid || session?.storeId)) {
+      return;
+    }
+
+    let cancelled = false;
+    setMerchantReviewsLoading(true);
+    setMerchantReviewsLoadingMore(false);
+
+    (async () => {
+      try {
+        const nextReviews = await loadMerchantReviews("", {
+          limit: REVIEWS_PAGE_SIZE,
+          offset: 0,
+        });
+        if (!cancelled) {
+          applyMerchantReviewsState(nextReviews.reviews, nextReviews.pageInfo);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          showToast(error.message || "Não foi possível carregar as avaliações.");
+        }
+      } finally {
+        if (!cancelled) {
+          setMerchantReviewsLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [screen, tab, sid, session?.storeId]);
+
+  useEffect(() => {
+    if (screen !== "admin" || tab !== "avaliacoes" || !(sid || session?.storeId)) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (merchantReviewsLoading || merchantReviewsLoadingMore || busyReviewId) {
+        return;
+      }
+
+      refreshMerchantReviews({
+        silent: true,
+        preserveVisibleCount: true,
+      }).catch((error) => {
+        if (error?.status === 401 || error?.status === 403) {
+          handleUnauthorizedSession();
+        }
+      });
+    }, MERCHANT_REVIEWS_AUTO_REFRESH_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [
+    screen,
+    tab,
+    sid,
+    session?.storeId,
+    merchantReviewsLoading,
+    merchantReviewsLoadingMore,
+    busyReviewId,
+  ]);
+
+  useEffect(() => {
+    if (screen !== "admin" || tab === "pedidos" || tab === "avaliacoes") {
+      return;
+    }
+
+    const activeStoreId = String(sid || session?.storeId || "").trim();
+    if (!activeStoreId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const insights = await loadMerchantOrders(activeStoreId, {
+          limit: 1,
+          cursor: "",
+        });
+        if (!cancelled) {
+          applyMerchantInsightsState(insights.summary);
+        }
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        if (error.status === 401 || error.status === 403) {
+          handleUnauthorizedSession();
         }
       }
     })();
@@ -586,8 +1110,13 @@ export function useMerchantController({
       ordersLoading,
       ordersPageInfo,
       ordersLoadingMore,
+      merchantReviews,
+      merchantReviewsLoading,
+      merchantReviewsPageInfo,
+      merchantReviewsLoadingMore,
       busyOrderId,
       busyCustomerKey,
+      busyReviewId,
       merchantPlanCatalog,
       merchantPlanCatalogLoading,
       merchantPlanCatalogError,
@@ -600,10 +1129,14 @@ export function useMerchantController({
       setTab,
       setModal,
       applyMerchantOrdersState,
+      applyMerchantInsightsState,
+      applyMerchantReviewsState,
       replaceCatalogState,
       clearCatalogState,
       loadCatalogState,
       loadMerchantOrders,
+      loadMerchantReviews,
+      refreshMerchantReviews,
       loadMerchantPlanOptions,
       updateMerchantPlanRequest,
       resetMerchantSessionState,
@@ -613,8 +1146,11 @@ export function useMerchantController({
       delProd,
       handleOrdersRefresh,
       handleOrdersLoadMore,
+      handleMerchantReviewsRefresh,
+      handleMerchantReviewsLoadMore,
       handleOrderStatusChange,
       handleCustomerDiscountSave,
+      handleStoreReviewFeatureToggle,
       handleMerchantPlanActivationRequest,
       handleMerchantPlanPaymentProofSubmit,
     },

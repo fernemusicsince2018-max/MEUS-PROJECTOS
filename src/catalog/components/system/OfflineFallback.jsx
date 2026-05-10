@@ -3,9 +3,9 @@ import BrandMark from "../common/BrandMark.jsx";
 
 export default function OfflineFallback({
   brand,
-  title = "Sem ligacao neste momento",
-  message = "Precisamos de internet para abrir esta area agora.",
-  hint = "Volta a tentar quando a ligacao estiver estavel.",
+  title = "Sem ligação neste momento",
+  message = "Precisamos de internet para abrir esta área agora.",
+  hint = "Volta a tentar quando a ligação estiver estável.",
   actionLabel = "Tentar novamente",
   onRetry,
 }) {

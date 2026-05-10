@@ -23,6 +23,11 @@ const REQUIRED_STORE_COLUMNS = [
   "address_line",
   "city",
   "country",
+  "payment_method",
+  "payment_bank_name",
+  "payment_account_name",
+  "payment_account_number",
+  "payment_iban",
   "public_slug",
   "custom_domain",
   "plan_id",
@@ -110,6 +115,17 @@ const REQUIRED_ORDER_STATS_COLUMNS = [
   "updated_at",
 ];
 
+const REQUIRED_ORDER_METRICS_HOURLY_COLUMNS = [
+  "store_id",
+  "bucket_hour",
+  "order_count",
+  "revenue_total",
+  "delivered_count",
+  "delivered_revenue_total",
+  "created_at",
+  "updated_at",
+];
+
 const REQUIRED_NOTIFICATION_JOB_COLUMNS = [
   "id",
   "type",
@@ -127,9 +143,39 @@ const REQUIRED_NOTIFICATION_JOB_COLUMNS = [
   "updated_at",
 ];
 
+const REQUIRED_PENDING_STORE_REGISTRATION_COLUMNS = [
+  "id",
+  "email",
+  "phone",
+  "full_name",
+  "store_name",
+  "password_hash",
+  "code_hash",
+  "requested_ip",
+  "expires_at",
+  "used_at",
+  "created_at",
+];
+
 const REQUIRED_PUBLIC_SNAPSHOT_COLUMNS = [
   "store_id",
   "response_body",
+  "updated_at",
+];
+
+const REQUIRED_STORE_REVIEW_COLUMNS = [
+  "id",
+  "store_id",
+  "order_id",
+  "customer_key",
+  "customer_name",
+  "customer_phone",
+  "rating",
+  "comment",
+  "is_public",
+  "is_featured",
+  "featured_at",
+  "created_at",
   "updated_at",
 ];
 
@@ -299,6 +345,19 @@ async function main() {
   const availableOrderStatsColumns = orderStatsColumnsResult.rows.map((row) => row.column_name);
   const missingOrderStatsColumns = REQUIRED_ORDER_STATS_COLUMNS.filter((column) => !availableOrderStatsColumns.includes(column));
 
+  const orderMetricsHourlyColumnsResult = await pool.query(
+    `
+      select column_name
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'catalog_order_metrics_hourly'
+      order by ordinal_position
+    `,
+  );
+
+  const availableOrderMetricsHourlyColumns = orderMetricsHourlyColumnsResult.rows.map((row) => row.column_name);
+  const missingOrderMetricsHourlyColumns = REQUIRED_ORDER_METRICS_HOURLY_COLUMNS.filter((column) => !availableOrderMetricsHourlyColumns.includes(column));
+
   const notificationJobColumnsResult = await pool.query(
     `
       select column_name
@@ -312,6 +371,19 @@ async function main() {
   const availableNotificationJobColumns = notificationJobColumnsResult.rows.map((row) => row.column_name);
   const missingNotificationJobColumns = REQUIRED_NOTIFICATION_JOB_COLUMNS.filter((column) => !availableNotificationJobColumns.includes(column));
 
+  const pendingStoreRegistrationColumnsResult = await pool.query(
+    `
+      select column_name
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'catalog_pending_store_registrations'
+      order by ordinal_position
+    `,
+  );
+
+  const availablePendingStoreRegistrationColumns = pendingStoreRegistrationColumnsResult.rows.map((row) => row.column_name);
+  const missingPendingStoreRegistrationColumns = REQUIRED_PENDING_STORE_REGISTRATION_COLUMNS.filter((column) => !availablePendingStoreRegistrationColumns.includes(column));
+
   const publicSnapshotColumnsResult = await pool.query(
     `
       select column_name
@@ -324,6 +396,19 @@ async function main() {
 
   const availablePublicSnapshotColumns = publicSnapshotColumnsResult.rows.map((row) => row.column_name);
   const missingPublicSnapshotColumns = REQUIRED_PUBLIC_SNAPSHOT_COLUMNS.filter((column) => !availablePublicSnapshotColumns.includes(column));
+
+  const storeReviewColumnsResult = await pool.query(
+    `
+      select column_name
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'catalog_store_reviews'
+      order by ordinal_position
+    `,
+  );
+
+  const availableStoreReviewColumns = storeReviewColumnsResult.rows.map((row) => row.column_name);
+  const missingStoreReviewColumns = REQUIRED_STORE_REVIEW_COLUMNS.filter((column) => !availableStoreReviewColumns.includes(column));
 
   const planEventColumnsResult = await pool.query(
     `
@@ -378,8 +463,11 @@ async function main() {
       and table_name in (
         'catalog_auth_rate_limits',
         'catalog_notification_jobs',
+        'catalog_order_metrics_hourly',
+        'catalog_pending_store_registrations',
         'catalog_password_reset_tokens',
         'catalog_public_snapshots',
+        'catalog_store_reviews',
         'catalog_order_stats',
         'catalog_plan_definitions',
         'catalog_plan_activation_events',
@@ -393,9 +481,12 @@ async function main() {
   const missingTables = [
     "catalog_auth_rate_limits",
     "catalog_notification_jobs",
+    "catalog_order_metrics_hourly",
+    "catalog_pending_store_registrations",
     "catalog_order_stats",
     "catalog_password_reset_tokens",
     "catalog_public_snapshots",
+    "catalog_store_reviews",
     "catalog_plan_definitions",
     "catalog_plan_activation_events",
     "catalog_plan_activation_requests",
@@ -411,8 +502,11 @@ async function main() {
   console.log(`Colunas de orders encontradas: ${availableOrderColumns.join(", ")}`);
   console.log(`Colunas de settings encontradas: ${availableSettingsColumns.join(", ")}`);
   console.log(`Colunas de order_stats encontradas: ${availableOrderStatsColumns.join(", ")}`);
+  console.log(`Colunas de order_metrics_hourly encontradas: ${availableOrderMetricsHourlyColumns.join(", ")}`);
   console.log(`Colunas de notification_jobs encontradas: ${availableNotificationJobColumns.join(", ")}`);
+  console.log(`Colunas de pending_store_registrations encontradas: ${availablePendingStoreRegistrationColumns.join(", ")}`);
   console.log(`Colunas de public_snapshots encontradas: ${availablePublicSnapshotColumns.join(", ")}`);
+  console.log(`Colunas de store_reviews encontradas: ${availableStoreReviewColumns.join(", ")}`);
   console.log(`Colunas de plan_activation_events encontradas: ${availablePlanEventColumns.join(", ")}`);
   console.log(`Colunas de plan_activation_requests encontradas: ${availablePlanRequestColumns.join(", ")}`);
   console.log(`Colunas de plan_payment_proofs encontradas: ${availablePlanProofColumns.join(", ")}`);
@@ -425,8 +519,11 @@ async function main() {
     || missingOrderColumns.length
     || missingSettingsColumns.length
     || missingOrderStatsColumns.length
+    || missingOrderMetricsHourlyColumns.length
     || missingNotificationJobColumns.length
+    || missingPendingStoreRegistrationColumns.length
     || missingPublicSnapshotColumns.length
+    || missingStoreReviewColumns.length
     || missingPlanEventColumns.length
     || missingPlanRequestColumns.length
     || missingPlanProofColumns.length
@@ -438,8 +535,11 @@ async function main() {
     console.log(`Colunas de orders em falta: ${missingOrderColumns.join(", ")}`);
     console.log(`Colunas de settings em falta: ${missingSettingsColumns.join(", ")}`);
     console.log(`Colunas de order_stats em falta: ${missingOrderStatsColumns.join(", ")}`);
+    console.log(`Colunas de order_metrics_hourly em falta: ${missingOrderMetricsHourlyColumns.join(", ")}`);
     console.log(`Colunas de notification_jobs em falta: ${missingNotificationJobColumns.join(", ")}`);
+    console.log(`Colunas de pending_store_registrations em falta: ${missingPendingStoreRegistrationColumns.join(", ")}`);
     console.log(`Colunas de public_snapshots em falta: ${missingPublicSnapshotColumns.join(", ")}`);
+    console.log(`Colunas de store_reviews em falta: ${missingStoreReviewColumns.join(", ")}`);
     console.log(`Colunas de plan_activation_events em falta: ${missingPlanEventColumns.join(", ")}`);
     console.log(`Colunas de plan_activation_requests em falta: ${missingPlanRequestColumns.join(", ")}`);
     console.log(`Colunas de plan_payment_proofs em falta: ${missingPlanProofColumns.join(", ")}`);
@@ -448,7 +548,7 @@ async function main() {
     return;
   }
 
-  console.log("Schema OK: colunas da empresa, utilizadores, produtos, pedidos, snapshots públicos, filas de notificacao, estatisticas, configuracoes, planos, comprovativos, eventos financeiros, controlos de seguranca e reset de password estao presentes.");
+  console.log("Schema OK: colunas da empresa, utilizadores, produtos, pedidos, reviews, snapshots públicos, filas de notificacao, estatisticas, configuracoes, planos, comprovativos, eventos financeiros, controlos de seguranca e reset de password estao presentes.");
 }
 
 main()

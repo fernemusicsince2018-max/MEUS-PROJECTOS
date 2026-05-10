@@ -233,7 +233,7 @@ function getMerchantOrderWhatsAppCapability(store) {
       enabled: false,
       recipient,
       config,
-      error: "WhatsApp Cloud API ainda nao configurado.",
+      error: "O envio automatico pelo WhatsApp ainda nao esta configurado.",
     };
   }
 
@@ -711,7 +711,7 @@ async function sendPlanActivationWhatsAppNotification({ event, store, planName, 
   }
 
   if (!config.enabled) {
-    result.error = "WhatsApp Cloud API ainda nao configurado.";
+    result.error = "O envio automatico pelo WhatsApp ainda nao esta configurado.";
     return result;
   }
 

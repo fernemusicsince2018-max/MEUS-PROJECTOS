@@ -534,7 +534,7 @@ export default function SuperAdminFinanceTab({
             <div style={{ fontSize: "18px", fontWeight: "800", fontFamily: "var(--font-display)" }}>Controlo financeiro</div>
             <div style={{ marginTop: "4px", fontSize: "12px", color: "var(--color-text-secondary)" }}>
               {hasPartialDataset
-                ? "Analise baseada nos registos financeiros carregados ate agora. Carrega mais para aproximar o historico completo."
+                ? "Análise baseada nos registos financeiros carregados até agora. Carrega mais para aproximar o histórico completo."
                 : "Evolucao financeira desde o primeiro pagamento registado ate hoje."}
             </div>
           </div>
@@ -550,7 +550,7 @@ export default function SuperAdminFinanceTab({
 
         {hasPartialDataset ? (
           <div style={{ padding: "12px 14px", borderRadius: "16px", background: "#fff7ed", border: "1px solid #fdba74", color: "#9a3412", fontSize: "12px", lineHeight: 1.6 }}>
-            Esta leitura usa <strong>{normalizedEvents.length}</strong> de <strong>{totalEventsCount}</strong> registos financeiros. Os totais, graficos e tendencias vao ficando mais completos conforme carregas mais historico.
+            Esta leitura usa <strong>{normalizedEvents.length}</strong> de <strong>{totalEventsCount}</strong> registos financeiros. Os totais, gráficos e tendências vão ficando mais completos conforme carregas mais histórico.
           </div>
         ) : null}
 
@@ -650,7 +650,7 @@ export default function SuperAdminFinanceTab({
 
         <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap", alignItems: "center", paddingTop: "4px", borderTop: "0.5px solid var(--color-border-tertiary)" }}>
           <div style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-            Periodo atual: <strong style={{ color: "var(--color-text-primary)" }}>{periodMode === "all" ? `Todo o historico (${currentPeriod.label})` : currentPeriod.label}</strong>
+            Período atual: <strong style={{ color: "var(--color-text-primary)" }}>{periodMode === "all" ? `Todo o histórico (${currentPeriod.label})` : currentPeriod.label}</strong>
           </div>
           {displayMode === "count" ? (
             <div style={{ fontSize: "12px", color: "#9a3412" }}>
@@ -666,7 +666,7 @@ export default function SuperAdminFinanceTab({
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>
         <FinanceMetricCard
-          label={hasPartialDataset ? "Total carregado" : "Total historico"}
+          label={hasPartialDataset ? "Total carregado" : "Total histórico"}
           value={formatCurrencyTotals(historicalTotals)}
           hint={
             hasPartialDataset
@@ -856,7 +856,7 @@ export default function SuperAdminFinanceTab({
                     </div>
 
                     <div style={{ fontSize: "12px", color: "var(--color-text-secondary)", display: "grid", gap: "3px" }}>
-                      <div><strong style={{ color: "var(--color-text-primary)" }}>{event.planName}</strong> ({event.planCode || "sem codigo"})</div>
+                      <div><strong style={{ color: "var(--color-text-primary)" }}>{event.planName}</strong> ({event.planCode || "sem código"})</div>
                       <div>Validade: {formatDateLabel(event.planStartedAt)} ate {formatDateLabel(event.planExpiresAt)}</div>
                     </div>
                   </div>

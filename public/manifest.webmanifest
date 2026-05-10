@@ -1,9 +1,9 @@
 {
-  "id": "/app",
+  "id": "/painel",
   "name": "KASTROZAPP",
   "short_name": "KASTROZAPP",
-  "description": "Sua loja no WhatsApp com catalogo digital, pedidos e painel do lojista.",
-  "start_url": "/app",
+  "description": "Sua loja pronta para vender no WhatsApp com catalogo online e painel mobile.",
+  "start_url": "/painel",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",

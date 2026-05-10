@@ -69,7 +69,7 @@ export default function ProductsTab({ prods, color, currencyCode, onAdd, onEdit,
         <div>
           <div style={{ fontSize: "16px", fontWeight: "600" }}>Meus produtos</div>
           <div style={{ fontSize: "13px", color: "var(--color-text-secondary)", marginTop: "2px" }}>
-            Organiza o stock, destaca promocoes e controla o que esta disponivel.
+            Organiza o stock, destaca promoções e controla o que está disponível.
           </div>
         </div>
 
@@ -109,7 +109,7 @@ export default function ProductsTab({ prods, color, currencyCode, onAdd, onEdit,
         >
           <Package size={36} style={{ marginBottom: "12px", opacity: 0.35 }} />
           <div style={{ fontSize: "14px", fontWeight: "600", marginBottom: "6px" }}>Ainda nao tens produtos</div>
-          <div style={{ fontSize: "13px" }}>Cria o primeiro item para comecar a montar o catalogo.</div>
+          <div style={{ fontSize: "13px" }}>Cria o primeiro item para começar a montar o catálogo.</div>
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "14px" }}>
@@ -142,7 +142,7 @@ export default function ProductsTab({ prods, color, currencyCode, onAdd, onEdit,
                   <div style={{ position: "absolute", top: "10px", left: "10px", display: "flex", gap: "6px", flexWrap: "wrap" }}>
                     {isProductOnPromotion(product) && (
                       <Badge bg="#fee2e2" color="#be123c">
-                        <Percent size={10} /> Promocao
+                        <Percent size={10} /> Promoção
                       </Badge>
                     )}
                     {product.featured && (
@@ -211,8 +211,8 @@ export default function ProductsTab({ prods, color, currencyCode, onAdd, onEdit,
 
                   <div style={{ fontSize: "11px", color: publicGalleryReady ? "#166534" : "#9a3412", marginBottom: "12px" }}>
                     {publicGalleryReady
-                      ? "Galeria publica ativa: o cliente pode abrir e deslizar entre as fotos."
-                      : "Galeria publica ainda inativa: adiciona pelo menos 2 fotos. Ideal: 4/4."}
+                      ? "Galeria pública ativa: o cliente pode abrir e deslizar entre as fotos."
+                      : "Galeria pública ainda inativa: adiciona pelo menos 2 fotos. Ideal: 4/4."}
                   </div>
 
                   <div style={{ display: "flex", gap: "6px" }}>

@@ -15,6 +15,11 @@ export const STORE_DEFAULTS = {
   addressLine: "",
   city: "",
   country: "",
+  paymentMethod: "",
+  paymentBankName: "",
+  paymentAccountName: "",
+  paymentAccountNumber: "",
+  paymentIban: "",
   publicSlug: "",
   customDomain: "",
 };

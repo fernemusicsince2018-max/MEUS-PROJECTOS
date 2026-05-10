@@ -3,53 +3,11 @@ import { getSuperAdminSession, requireSuperAdminAccess } from "./_auth.js";
 import { invalidatePublicCatalogCache } from "./_catalog-cache.js";
 import { isEmailDeliveryConfigured, sendPlanActivationEmail } from "./_email.js";
 import { getPool, jsonResponse, withCors } from "./_postgres.js";
-import { assertPlanPaymentFlowSchema, mapPlanRequestsWithProofs } from "./_plan-requests.js";
+import { PLAN_REQUEST_SELECT_SQL, assertPlanPaymentFlowSchema, mapPlanRequestsWithProofs } from "./_plan-requests.js";
 import { sendPlanActivationWhatsAppNotification } from "./_whatsapp.js";
 
 const PLAN_REQUEST_REVIEW_ACTIONS = new Set(["under_review", "needs_correction", "rejected", "activated"]);
 const REQUEST_FINAL_STATUSES = new Set(["activated", "rejected", "expired"]);
-
-const PLAN_REQUEST_SELECT_SQL = `
-  requests.id,
-  requests.store_id,
-  requests.user_id,
-  requests.plan_id,
-  requests.plan_code,
-  requests.plan_name,
-  requests.store_name,
-  requests.merchant_email,
-  requests.reference_id,
-  requests.store_whatsapp,
-  requests.product_count,
-  requests.current_plan_status,
-  requests.current_plan_name,
-  requests.duration_days,
-  requests.total_price,
-  requests.currency_code,
-  requests.message_text,
-  requests.whatsapp_link,
-  requests.payment_reference,
-  requests.payment_method,
-  requests.payment_instructions,
-  requests.payment_bank_name,
-  requests.payment_account_name,
-  requests.payment_account_number,
-  requests.payment_iban,
-  requests.payment_proof_status,
-  requests.merchant_note,
-  requests.review_note,
-  requests.paid_amount,
-  requests.paid_currency_code,
-  requests.paid_at,
-  requests.payment_due_at,
-  requests.last_proof_submitted_at,
-  requests.status,
-  requests.requested_at,
-  requests.resolved_at,
-  requests.resolved_by_user_id,
-  requests.activated_at,
-  requests.activated_by_user_id
-`;
 
 function cleanText(value, maxLength = null) {
   const text = String(value || "").trim();

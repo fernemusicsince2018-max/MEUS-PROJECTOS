@@ -49,9 +49,9 @@ export const catalogStorage = {
     return provider.set(key, value);
   },
   getStatus() {
-    if (remoteProvider.available) return { mode: "remote", label: "API PostgreSQL" };
-    if (runtimeConfig.requireRemoteApi) return { mode: "required_remote", label: "API obrigatoria" };
-    if (windowProvider.available) return { mode: "platform", label: "Storage da plataforma" };
-    return { mode: "local", label: "LocalStorage" };
+    if (remoteProvider.available) return { mode: "remote", label: "Servidor da loja" };
+    if (runtimeConfig.requireRemoteApi) return { mode: "required_remote", label: "Ligacao obrigatoria" };
+    if (windowProvider.available) return { mode: "platform", label: "Dados do dispositivo" };
+    return { mode: "local", label: "Dados locais" };
   },
 };

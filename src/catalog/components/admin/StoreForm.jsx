@@ -45,6 +45,7 @@ function createClosedSections() {
     identity: false,
     operations: false,
     business: false,
+    payment: false,
     location: false,
   };
 }
@@ -54,12 +55,20 @@ function getInitialOpenSections(store) {
   const hasIdentity = Boolean(normalized.name || normalized.description || normalized.whatsapp || normalized.logo);
   const hasOperations = Boolean(normalized.pickupNote) || normalized.publicEnabled;
   const hasBusiness = Boolean(normalized.legalName || normalized.taxId || normalized.businessPhone || normalized.businessEmail || normalized.addressLine);
+  const hasPayment = Boolean(
+    normalized.paymentMethod
+    || normalized.paymentBankName
+    || normalized.paymentAccountName
+    || normalized.paymentAccountNumber
+    || normalized.paymentIban,
+  );
   const hasLocation = Boolean(normalized.country || normalized.city) || normalized.color !== STORE_DEFAULTS.color;
 
   return {
     identity: !hasIdentity,
     operations: !hasOperations,
     business: !hasBusiness,
+    payment: !hasPayment,
     location: !hasLocation,
   };
 }
@@ -170,6 +179,10 @@ export default function StoreForm({ store, onSave, catalogLocked = false, planAc
   const identityStatus = getSectionStatus([form.name, form.whatsapp, form.currencyCode], 3);
   const operationsStatus = getSectionStatus([form.pickupNote, form.publicSlug || form.customDomain], 2);
   const businessStatus = getSectionStatus([form.legalName, form.taxId, form.businessPhone, form.businessEmail, form.addressLine], 5);
+  const paymentStatus = getSectionStatus(
+    [form.paymentMethod, form.paymentBankName, form.paymentAccountName, form.paymentAccountNumber || form.paymentIban],
+    4,
+  );
   const locationStatus = getSectionStatus([form.country, form.city], 2);
 
   React.useEffect(() => {
@@ -211,7 +224,7 @@ export default function StoreForm({ store, onSave, catalogLocked = false, planAc
 
   async function handleSave() {
     if (uploadingLogo) {
-      setLogoError("Aguarda um momento. O logo ainda esta a ser enviado para o storage.");
+      setLogoError("Aguarda um momento. O logo ainda esta a ser preparado.");
       return;
     }
 
@@ -329,14 +342,14 @@ export default function StoreForm({ store, onSave, catalogLocked = false, planAc
 
         <SectionCard
           title="Identidade da loja"
-          description="Nome, descricao, WhatsApp, moeda e logo usados na vitrine e no carrinho."
+          description="Nome, descrição, WhatsApp, moeda e logo usados na vitrine e no carrinho."
           status={identityStatus}
           open={openSections.identity}
           onToggle={() => setOpenSections((current) => ({ ...current, identity: !current.identity }))}
           summary={
             <>
               <PreviewLine label="Nome" value={formatPreviewValue(form.name, "Ainda sem nome")} />
-              <PreviewLine label="Descricao" value={formatPreviewValue(form.description)} />
+              <PreviewLine label="Descrição" value={formatPreviewValue(form.description)} />
               <PreviewLine label="WhatsApp" value={formatPreviewValue(form.whatsapp)} />
               <PreviewLine label="Moeda" value={selectedCurrency.label} />
               <PreviewLine label="Logo" value={form.logo ? "Configurado" : "Sem logo"} />
@@ -345,11 +358,11 @@ export default function StoreForm({ store, onSave, catalogLocked = false, planAc
         >
           <div style={{ display: "grid", gap: "16px" }}>
             <FLabel label="Nome da loja">
-              <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Ex: Moda & Estilo" style={FIELD_STYLE} />
+              <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Ex.: Moda & Estilo." style={FIELD_STYLE} />
             </FLabel>
 
             <FLabel label="Descricao">
-              <textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Uma frase curta sobre a tua loja" rows={3} style={TEXTAREA_STYLE} />
+              <textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Uma frase curta sobre a tua loja." rows={3} style={TEXTAREA_STYLE} />
             </FLabel>
 
             <FLabel label="WhatsApp ou link direto" hint={fieldMeta.whatsappHint}>
@@ -366,7 +379,7 @@ export default function StoreForm({ store, onSave, catalogLocked = false, planAc
               </select>
             </FLabel>
 
-            <FLabel label="Logo da loja" hint="Podes carregar uma imagem do computador ou colar uma URL publica.">
+            <FLabel label="Logo da loja" hint="Podes carregar uma imagem do computador ou colar uma URL pública.">
               <div style={{ display: "grid", gap: "10px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
                   <input ref={fileInputRef} type="file" accept="image/*" onChange={handleLogoSelect} style={{ display: "none" }} />
@@ -441,7 +454,7 @@ export default function StoreForm({ store, onSave, catalogLocked = false, planAc
                   </div>
                 )}
                 <div style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                  Se escolheres um ficheiro local, o sistema otimiza e envia o logo para storage antes de guardar.
+                  Se escolheres um ficheiro local, o sistema otimiza e prepara o logo antes de guardar.
                 </div>
                 {logoError && <div style={{ padding: "10px 12px", borderRadius: "var(--border-radius-md)", background: "#fee2e2", color: "#b91c1c", fontSize: "12px", fontWeight: "700" }}>{logoError}</div>}
               </div>
@@ -451,7 +464,7 @@ export default function StoreForm({ store, onSave, catalogLocked = false, planAc
 
         <SectionCard
           title="Entrega e visibilidade"
-          description="Define como o cliente recebe a compra e se o catalogo pode ficar publico."
+          description="Define como o cliente recebe a compra e se o catálogo pode ficar público."
           status={operationsStatus}
           open={openSections.operations}
           onToggle={() => setOpenSections((current) => ({ ...current, operations: !current.operations }))}
@@ -460,9 +473,9 @@ export default function StoreForm({ store, onSave, catalogLocked = false, planAc
               <PreviewLine label="Recebimento" value={formatPreviewValue(form.pickupNote)} />
               <PreviewLine
                 label="Formato do pedido"
-                value={WHATSAPP_ORDER_FORMAT_OPTIONS.find((option) => option.value === form.whatsappOrderFormat)?.label || "Pedido escrito com quantidades e precos"}
+                value={WHATSAPP_ORDER_FORMAT_OPTIONS.find((option) => option.value === form.whatsappOrderFormat)?.label || "Pedido escrito com quantidades e preços"}
               />
-              <PreviewLine label="Catalogo publico" value={form.publicEnabled ? "Ativo" : "Desligado"} />
+              <PreviewLine label="Catálogo público" value={form.publicEnabled ? "Ativo" : "Desligado"} />
               <PreviewLine label="Subdominio" value={formatPreviewValue(form.publicSlug)} />
               <PreviewLine label="Dominio proprio" value={formatPreviewValue(form.customDomain)} />
             </>
@@ -470,10 +483,10 @@ export default function StoreForm({ store, onSave, catalogLocked = false, planAc
         >
           <div style={{ display: "grid", gap: "16px" }}>
             <FLabel label="Entrega ou retirada do pedido" hint="Escreve como o cliente recebe a compra: entrega, retirada na loja ou os dois.">
-              <input data-testid="store-pickup-note" value={form.pickupNote} onChange={(event) => { setForm({ ...form, pickupNote: event.target.value }); setSaveError(""); }} placeholder="Ex: Entrega em Luanda e retirada na loja das 9h as 18h" style={FIELD_STYLE} />
+              <input data-testid="store-pickup-note" value={form.pickupNote} onChange={(event) => { setForm({ ...form, pickupNote: event.target.value }); setSaveError(""); }} placeholder="Ex.: Entrega em Luanda e retirada na loja das 9h as 18h." style={FIELD_STYLE} />
             </FLabel>
 
-            <FLabel label="Formato da mensagem no WhatsApp" hint="O WhatsApp recebe sempre o pedido escrito com quantidades e precos. As fotos nao seguem como anexo automatico neste fluxo; se escolheres links das imagens, eles so entram quando a foto do produto for uma URL publica.">
+            <FLabel label="Formato da mensagem no WhatsApp" hint="O WhatsApp recebe sempre o pedido escrito com quantidades e preços. As fotos não seguem como anexo automático neste fluxo; se escolheres links das imagens, eles só entram quando a foto do produto for uma URL pública.">
               <select
                 value={form.whatsappOrderFormat || "text_only"}
                 onChange={(event) => { setForm({ ...form, whatsappOrderFormat: event.target.value }); setSaveError(""); }}
@@ -488,7 +501,7 @@ export default function StoreForm({ store, onSave, catalogLocked = false, planAc
             </FLabel>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>
-              <FLabel label="Subdominio publico" hint="Opcional. Define o nome da loja no host publico da plataforma, por exemplo `minha-loja`.">
+              <FLabel label="Subdomínio público" hint="Opcional. Define o nome da loja no host público da plataforma, por exemplo `minha-loja`.">
                 <input
                   value={form.publicSlug}
                   onChange={(event) => {
@@ -533,11 +546,11 @@ export default function StoreForm({ store, onSave, catalogLocked = false, planAc
               )}
               <ToggleTile
                 data-testid="store-public-enabled"
-                label="Catalogo publico ativo"
+                label="Catálogo público ativo"
                 description={
                   catalogLocked
-                    ? "Mesmo ligado, o link publico fica bloqueado para clientes enquanto o plano nao estiver ativo."
-                    : "Quando estiver desligado, o link publico deixa de abrir para clientes e o catalogo fica apenas no painel admin."
+                    ? "Mesmo ligado, o link público fica bloqueado para clientes enquanto o plano não estiver ativo."
+                    : "Quando estiver desligado, o link público deixa de abrir para clientes e o catálogo fica apenas no painel admin."
                 }
                 checked={form.publicEnabled}
                 onChange={(checked) => { setForm({ ...form, publicEnabled: checked }); setSaveError(""); }}
@@ -564,7 +577,7 @@ export default function StoreForm({ store, onSave, catalogLocked = false, planAc
         >
           <div style={{ display: "grid", gap: "16px" }}>
             <FLabel label="Nome legal da empresa" hint="Preenche se for diferente do nome da loja.">
-              <input value={form.legalName} onChange={(event) => { setForm({ ...form, legalName: event.target.value }); setSaveError(""); }} placeholder="Ex: Ferna Comercio e Servicos, Lda." style={FIELD_STYLE} />
+              <input value={form.legalName} onChange={(event) => { setForm({ ...form, legalName: event.target.value }); setSaveError(""); }} placeholder="Ex.: Ferna Comercio e Servicos, Lda." style={FIELD_STYLE} />
             </FLabel>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
@@ -582,14 +595,57 @@ export default function StoreForm({ store, onSave, catalogLocked = false, planAc
             </FLabel>
 
             <FLabel label="Morada da empresa">
-              <textarea value={form.addressLine} onChange={(event) => { setForm({ ...form, addressLine: event.target.value }); setSaveError(""); }} placeholder="Rua, numero, referencia..." rows={2} style={TEXTAREA_STYLE} />
+              <textarea value={form.addressLine} onChange={(event) => { setForm({ ...form, addressLine: event.target.value }); setSaveError(""); }} placeholder="Rua, número e referência." rows={2} style={TEXTAREA_STYLE} />
             </FLabel>
           </div>
         </SectionCard>
 
         <SectionCard
+          title="Dados de pagamento"
+          description="Campos privados para guardar como a tua empresa recebe pagamentos. Nao aparecem no catalogo publico."
+          status={paymentStatus}
+          open={openSections.payment}
+          onToggle={() => setOpenSections((current) => ({ ...current, payment: !current.payment }))}
+          summary={
+            <>
+              <PreviewLine label="Metodo" value={formatPreviewValue(form.paymentMethod)} />
+              <PreviewLine label="Banco" value={formatPreviewValue(form.paymentBankName)} />
+              <PreviewLine label="Titular" value={formatPreviewValue(form.paymentAccountName)} />
+              <PreviewLine label="Conta" value={formatPreviewValue(form.paymentAccountNumber)} />
+              <PreviewLine label="IBAN" value={formatPreviewValue(form.paymentIban)} />
+            </>
+          }
+        >
+          <div style={{ display: "grid", gap: "16px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
+              <FLabel label="Metodo">
+                <input value={form.paymentMethod} onChange={(event) => { setForm({ ...form, paymentMethod: event.target.value }); setSaveError(""); }} placeholder="Ex.: Transferencia bancaria." style={FIELD_STYLE} />
+              </FLabel>
+
+              <FLabel label="Banco">
+                <input value={form.paymentBankName} onChange={(event) => { setForm({ ...form, paymentBankName: event.target.value }); setSaveError(""); }} placeholder="Ex.: BAI." style={FIELD_STYLE} />
+              </FLabel>
+            </div>
+
+            <FLabel label="Titular">
+              <input value={form.paymentAccountName} onChange={(event) => { setForm({ ...form, paymentAccountName: event.target.value }); setSaveError(""); }} placeholder="Nome do titular da conta." style={FIELD_STYLE} />
+            </FLabel>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
+              <FLabel label="Conta">
+                <input value={form.paymentAccountNumber} onChange={(event) => { setForm({ ...form, paymentAccountNumber: event.target.value }); setSaveError(""); }} placeholder="Numero da conta." style={FIELD_STYLE} />
+              </FLabel>
+
+              <FLabel label="IBAN" hint="Opcional. Preenche quando a tua conta usar IBAN.">
+                <input value={form.paymentIban} onChange={(event) => { setForm({ ...form, paymentIban: event.target.value }); setSaveError(""); }} placeholder="AO06 0000 0000 0000 0000 0000 0" style={FIELD_STYLE} />
+              </FLabel>
+            </div>
+          </div>
+        </SectionCard>
+
+        <SectionCard
           title="Localizacao e aparencia"
-          description="Pais, regiao e cor principal usados na interface e nos pedidos."
+          description="País, região e cor principal usados na interface e nos pedidos."
           status={locationStatus}
           open={openSections.location}
           onToggle={() => setOpenSections((current) => ({ ...current, location: !current.location }))}
@@ -603,16 +659,16 @@ export default function StoreForm({ store, onSave, catalogLocked = false, planAc
         >
           <div style={{ display: "grid", gap: "16px" }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
-              <FLabel label="Pais" hint="Seleciona o pais para carregar a lista certa de provincias, estados ou regioes.">
+              <FLabel label="País" hint="Seleciona o país para carregar a lista certa de províncias, estados ou regiões.">
                 <div style={{ display: "grid", gap: "8px" }}>
                   <select data-testid="store-country" value={selectedCountryValue} onChange={(event) => { handleCountrySelectChange(event); setSaveError(""); }} style={FIELD_STYLE}>
-                    <option value="">Seleciona o pais</option>
+                    <option value="">Seleciona o país</option>
                     {COUNTRY_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
                     ))}
-                    <option value="__custom__">Outro pais</option>
+                    <option value="__custom__">Outro país</option>
                   </select>
 
                   {selectedCountryValue === "__custom__" && (
@@ -620,7 +676,7 @@ export default function StoreForm({ store, onSave, catalogLocked = false, planAc
                       data-testid="store-country-custom"
                       value={form.country}
                       onChange={(event) => { handleCustomCountryChange(event); setSaveError(""); }}
-                      placeholder="Escreve o pais"
+                      placeholder="Escreve o país"
                       style={FIELD_STYLE}
                     />
                   )}
@@ -629,7 +685,7 @@ export default function StoreForm({ store, onSave, catalogLocked = false, planAc
 
               <FLabel
                 label={regionLabel}
-                hint={regionOptions.length > 0 ? "A lista muda automaticamente de acordo com o pais escolhido." : "Se o pais nao tiver lista configurada, podes escrever manualmente."}
+                hint={regionOptions.length > 0 ? "A lista muda automaticamente de acordo com o país escolhido." : "Se o país não tiver lista configurada, podes escrever manualmente."}
               >
                 {regionOptions.length > 0 ? (
                   <select
@@ -647,7 +703,7 @@ export default function StoreForm({ store, onSave, catalogLocked = false, planAc
                     ))}
                   </select>
                 ) : (
-                  <input data-testid="store-region" value={form.city} onChange={(event) => { setForm({ ...form, city: event.target.value }); setSaveError(""); }} placeholder="Ex: Luanda" style={FIELD_STYLE} />
+                  <input data-testid="store-region" value={form.city} onChange={(event) => { setForm({ ...form, city: event.target.value }); setSaveError(""); }} placeholder="Ex.: Luanda." style={FIELD_STYLE} />
                 )}
               </FLabel>
             </div>
@@ -716,7 +772,7 @@ export default function StoreForm({ store, onSave, catalogLocked = false, planAc
               opacity: saving || uploadingLogo ? 0.75 : 1,
             }}
           >
-            <Check size={14} /> {saving ? "A guardar..." : uploadingLogo ? "A enviar logo..." : "Guardar configuracoes"}
+            <Check size={14} /> {saving ? "A guardar..." : uploadingLogo ? "A enviar logo..." : "Guardar configurações"}
           </button>
         </div>
       </div>
@@ -730,11 +786,11 @@ export default function StoreForm({ store, onSave, catalogLocked = false, planAc
         </div>
         <div style={{ display: "grid", gap: "10px" }}>
           <PreviewLine label="Nome" value={formatPreviewValue(form.name, "Ainda sem nome")} />
-          <PreviewLine label="Descricao" value={formatPreviewValue(form.description)} />
+          <PreviewLine label="Descrição" value={formatPreviewValue(form.description)} />
           <PreviewLine label="WhatsApp" value={formatPreviewValue(form.whatsapp)} />
           <PreviewLine label="Moeda" value={selectedCurrency.label} />
           <PreviewLine label="Logo" value={form.logo ? "Configurado" : "Sem logo"} />
-          <PreviewLine label="Catalogo publico" value={form.publicEnabled ? "Ativo" : "Desligado"} />
+          <PreviewLine label="Catálogo público" value={form.publicEnabled ? "Ativo" : "Desligado"} />
           <PreviewLine label="Subdominio" value={formatPreviewValue(form.publicSlug)} />
           <PreviewLine label="Dominio proprio" value={formatPreviewValue(form.customDomain)} />
           <PreviewLine label="Recebimento" value={formatPreviewValue(form.pickupNote)} />
@@ -743,7 +799,12 @@ export default function StoreForm({ store, onSave, catalogLocked = false, planAc
           <PreviewLine label="Telefone empresa" value={formatPreviewValue(form.businessPhone)} />
           <PreviewLine label="Email comercial" value={formatPreviewValue(form.businessEmail)} />
           <PreviewLine label="Morada" value={formatPreviewValue(form.addressLine)} />
-          <PreviewLine label="Pais" value={formatPreviewValue(form.country)} />
+          <PreviewLine label="Metodo" value={formatPreviewValue(form.paymentMethod)} />
+          <PreviewLine label="Banco" value={formatPreviewValue(form.paymentBankName)} />
+          <PreviewLine label="Titular" value={formatPreviewValue(form.paymentAccountName)} />
+          <PreviewLine label="Conta" value={formatPreviewValue(form.paymentAccountNumber)} />
+          <PreviewLine label="IBAN" value={formatPreviewValue(form.paymentIban)} />
+          <PreviewLine label="País" value={formatPreviewValue(form.country)} />
           <PreviewLine label={regionLabel} value={formatPreviewValue(form.city)} />
           <PreviewLine label="Cor" value={form.color} swatch={form.color} />
         </div>

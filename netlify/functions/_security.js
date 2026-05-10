@@ -10,6 +10,7 @@ const PRODUCT_IMAGE_DATA_URL_RE = /^data:image\/(?:png|jpe?g|webp|gif|svg\+xml);
 const RATE_LIMITS = {
   login: { maxAttempts: 5, windowMinutes: 15, blockMinutes: 15 },
   register: { maxAttempts: 4, windowMinutes: 30, blockMinutes: 30 },
+  registrationApproval: { maxAttempts: 5, windowMinutes: 60, blockMinutes: 60 },
   passwordResetRequest: { maxAttempts: 3, windowMinutes: 30, blockMinutes: 30 },
   passwordResetConfirm: { maxAttempts: 5, windowMinutes: 30, blockMinutes: 30 },
 };
@@ -302,6 +303,10 @@ function normalizeProductImageCollection(value, fieldLabel = "O produto") {
 function shouldExposeResetCode() {
   const explicitFlag = String(process.env.CATALOG_EXPOSE_RESET_CODE || "").trim().toLowerCase();
   if (explicitFlag === "true") {
+    return true;
+  }
+
+  if (String(process.env.LOCAL_FUNCTIONS_PORT || "").trim()) {
     return true;
   }
 

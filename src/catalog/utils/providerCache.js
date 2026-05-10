@@ -41,3 +41,16 @@ export async function writeProviderCache(provider, key, payload) {
 
   return updatedAt;
 }
+
+export async function deleteProviderCache(provider, key) {
+  if (!provider || !key) return false;
+
+  try {
+    if (typeof provider.remove === "function") {
+      await provider.remove(key);
+      return true;
+    }
+  } catch (error) {}
+
+  return false;
+}

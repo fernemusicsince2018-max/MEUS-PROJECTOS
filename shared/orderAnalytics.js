@@ -82,15 +82,16 @@ function formatDayLabel(dayKey) {
   return `${day}/${month}`;
 }
 
-export function buildMerchantOrderSummary(orders = [], options = {}) {
-  const timezoneOffsetMinutes = normalizeTimezoneOffsetMinutes(
-    options.timezoneOffsetMinutes,
-  );
-  const windowDays = normalizeWindowDays(options.windowDays);
-  const parsedReferenceTimestamp = toTimestamp(options.referenceNow);
-  const referenceTimestamp = Number.isFinite(parsedReferenceTimestamp)
-    ? parsedReferenceTimestamp
-    : Date.now();
+function normalizeStatusCounts(value = {}) {
+  return {
+    pending: Math.max(0, Number(value?.pending || 0)),
+    inProgress: Math.max(0, Number(value?.inProgress || value?.in_progress || 0)),
+    onTheWay: Math.max(0, Number(value?.onTheWay || value?.on_the_way || 0)),
+    delivered: Math.max(0, Number(value?.delivered || 0)),
+  };
+}
+
+function createRevenueSeriesState(referenceTimestamp, timezoneOffsetMinutes, windowDays) {
   const currentDayStart = startOfLocalDayTimestamp(
     referenceTimestamp,
     timezoneOffsetMinutes,
@@ -113,15 +114,182 @@ export function buildMerchantOrderSummary(orders = [], options = {}) {
     });
   }
 
-  const statusCounts = {
-    pending: 0,
-    inProgress: 0,
-    onTheWay: 0,
-    delivered: 0,
+  return {
+    currentDayStart,
+    currentDayKey,
+    revenueSeries,
+    seriesByKey: new Map(
+      revenueSeries.map((entry) => [entry.key, entry]),
+    ),
   };
-  const seriesByKey = new Map(
-    revenueSeries.map((entry) => [entry.key, entry]),
+}
+
+function buildGrowthSummary(revenueSeries, previousWindowRevenue) {
+  const currentWindowRevenue = revenueSeries.reduce(
+    (accumulator, entry) => accumulator + Number(entry.total || 0),
+    0,
   );
+
+  return previousWindowRevenue > 0
+    ? {
+        mode: "value",
+        percentage: Number(
+          (
+            ((currentWindowRevenue - previousWindowRevenue)
+              / previousWindowRevenue)
+            * 100
+          ).toFixed(1),
+        ),
+        currentWindowRevenue: roundMoney(currentWindowRevenue),
+        previousWindowRevenue: roundMoney(previousWindowRevenue),
+      }
+    : currentWindowRevenue > 0
+      ? {
+          mode: "new",
+          percentage: 0,
+          currentWindowRevenue: roundMoney(currentWindowRevenue),
+          previousWindowRevenue: 0,
+        }
+      : {
+          mode: "value",
+          percentage: 0,
+          currentWindowRevenue: 0,
+          previousWindowRevenue: 0,
+        };
+}
+
+export function buildMerchantOrderSummaryFromMetricsBuckets(metrics = [], options = {}) {
+  const timezoneOffsetMinutes = normalizeTimezoneOffsetMinutes(
+    options.timezoneOffsetMinutes,
+  );
+  const windowDays = normalizeWindowDays(options.windowDays);
+  const parsedReferenceTimestamp = toTimestamp(options.referenceNow);
+  const referenceTimestamp = Number.isFinite(parsedReferenceTimestamp)
+    ? parsedReferenceTimestamp
+    : Date.now();
+  const {
+    currentDayStart,
+    currentDayKey,
+    revenueSeries,
+    seriesByKey,
+  } = createRevenueSeriesState(referenceTimestamp, timezoneOffsetMinutes, windowDays);
+  const statusCounts = normalizeStatusCounts(options.statusCounts);
+  let todayCount = 0;
+  let todayRevenue = 0;
+  let deliveredTodayCount = 0;
+  let previousWindowRevenue = 0;
+  let countedOrders = 0;
+  const previousWindowStart =
+    currentDayStart - (windowDays * 2 - 1) * DAY_MS;
+  const previousWindowEnd = currentDayStart - (windowDays - 1) * DAY_MS;
+
+  for (const metric of Array.isArray(metrics) ? metrics : []) {
+    const bucketTimestamp = toTimestamp(
+      metric?.bucketStart
+      || metric?.bucket_start
+      || metric?.bucketHour
+      || metric?.bucket_hour,
+    );
+    if (!Number.isFinite(bucketTimestamp)) continue;
+
+    const count = Math.max(
+      0,
+      Math.floor(Number(metric?.count ?? metric?.orderCount ?? metric?.order_count ?? 0)),
+    );
+    const revenue = roundMoney(
+      metric?.revenue
+      ?? metric?.revenueTotal
+      ?? metric?.revenue_total
+      ?? 0,
+    );
+    const deliveredCount = Math.max(
+      0,
+      Math.floor(
+        Number(
+          metric?.deliveredCount
+          ?? metric?.delivered_count
+          ?? 0,
+        ),
+      ),
+    );
+    const deliveredRevenue = roundMoney(
+      metric?.deliveredRevenue
+      ?? metric?.deliveredRevenueTotal
+      ?? metric?.delivered_revenue_total
+      ?? 0,
+    );
+
+    countedOrders += count;
+
+    const dayKey = createDayKeyFromTimestamp(
+      bucketTimestamp,
+      timezoneOffsetMinutes,
+    );
+
+    if (dayKey === currentDayKey) {
+      todayCount += count;
+      todayRevenue = roundMoney(todayRevenue + revenue);
+      deliveredTodayCount += deliveredCount;
+    }
+
+    const seriesEntry = seriesByKey.get(dayKey);
+    if (seriesEntry) {
+      seriesEntry.total = roundMoney(seriesEntry.total + revenue);
+      seriesEntry.deliveredTotal = roundMoney(
+        seriesEntry.deliveredTotal + deliveredRevenue,
+      );
+      seriesEntry.count += count;
+    }
+
+    if (
+      bucketTimestamp >= previousWindowStart
+      && bucketTimestamp < previousWindowEnd
+    ) {
+      previousWindowRevenue = roundMoney(previousWindowRevenue + revenue);
+    }
+  }
+
+  const totalCount = Math.max(
+    0,
+    Number(options.totalCount ?? countedOrders ?? 0),
+  );
+
+  return {
+    totalCount,
+    currentDayKey,
+    generatedAt: new Date(referenceTimestamp).toISOString(),
+    timezoneOffsetMinutes,
+    windowDays,
+    statusCounts,
+    today: {
+      count: todayCount,
+      revenue: roundMoney(todayRevenue),
+      deliveredCount: deliveredTodayCount,
+    },
+    historical: {
+      count: Math.max(0, totalCount - todayCount),
+    },
+    growth: buildGrowthSummary(revenueSeries, previousWindowRevenue),
+    revenueSeries,
+  };
+}
+
+export function buildMerchantOrderSummary(orders = [], options = {}) {
+  const timezoneOffsetMinutes = normalizeTimezoneOffsetMinutes(
+    options.timezoneOffsetMinutes,
+  );
+  const windowDays = normalizeWindowDays(options.windowDays);
+  const parsedReferenceTimestamp = toTimestamp(options.referenceNow);
+  const referenceTimestamp = Number.isFinite(parsedReferenceTimestamp)
+    ? parsedReferenceTimestamp
+    : Date.now();
+  const {
+    currentDayStart,
+    currentDayKey,
+    revenueSeries,
+    seriesByKey,
+  } = createRevenueSeriesState(referenceTimestamp, timezoneOffsetMinutes, windowDays);
+  const statusCounts = normalizeStatusCounts();
   let todayCount = 0;
   let todayRevenue = 0;
   let deliveredTodayCount = 0;
@@ -180,41 +348,9 @@ export function buildMerchantOrderSummary(orders = [], options = {}) {
       createdAtTime >= previousWindowStart
       && createdAtTime < previousWindowEnd
     ) {
-      previousWindowRevenue += totalAmount;
+      previousWindowRevenue = roundMoney(previousWindowRevenue + totalAmount);
     }
   }
-
-  const currentWindowRevenue = revenueSeries.reduce(
-    (accumulator, entry) => accumulator + Number(entry.total || 0),
-    0,
-  );
-  const growth =
-    previousWindowRevenue > 0
-      ? {
-          mode: "value",
-          percentage: Number(
-            (
-              ((currentWindowRevenue - previousWindowRevenue)
-                / previousWindowRevenue)
-              * 100
-            ).toFixed(1),
-          ),
-          currentWindowRevenue: roundMoney(currentWindowRevenue),
-          previousWindowRevenue: roundMoney(previousWindowRevenue),
-        }
-      : currentWindowRevenue > 0
-        ? {
-            mode: "new",
-            percentage: 0,
-            currentWindowRevenue: roundMoney(currentWindowRevenue),
-            previousWindowRevenue: 0,
-          }
-        : {
-            mode: "value",
-            percentage: 0,
-            currentWindowRevenue: 0,
-            previousWindowRevenue: 0,
-          };
 
   return {
     totalCount: Array.isArray(orders) ? orders.length : 0,
@@ -231,7 +367,7 @@ export function buildMerchantOrderSummary(orders = [], options = {}) {
     historical: {
       count: Math.max(0, (Array.isArray(orders) ? orders.length : 0) - todayCount),
     },
-    growth,
+    growth: buildGrowthSummary(revenueSeries, previousWindowRevenue),
     revenueSeries,
   };
 }

@@ -1,6 +1,7 @@
 import { getSessionContext } from "./_auth.js";
 import { ensureDatabaseReady, getPool, jsonResponse, mapProduct, mapStore, withCors } from "./_postgres.js";
 import { getSystemSettings } from "./_settings.js";
+import { getCatalogStorePaymentColumnAvailability, getCatalogStorePaymentSelectFragments } from "./_store-payment-columns.js";
 
 async function handle(event) {
   try {
@@ -17,6 +18,8 @@ async function handle(event) {
 
     const pool = getPool();
     const systemSettings = await getSystemSettings(pool);
+    const paymentColumns = await getCatalogStorePaymentColumnAvailability(pool);
+    const paymentSelectSql = getCatalogStorePaymentSelectFragments(paymentColumns).join(",\n         ");
     const stores = await pool.query(
       `select
          id,
@@ -37,6 +40,7 @@ async function handle(event) {
          address_line,
          city,
          country,
+         ${paymentSelectSql},
          public_slug,
          custom_domain
         from catalog_stores

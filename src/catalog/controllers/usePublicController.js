@@ -39,6 +39,7 @@ export function usePublicController({
   const [trackedOrder, setTrackedOrder] = useState(null);
   const [trackingLoading, setTrackingLoading] = useState(false);
   const [trackingError, setTrackingError] = useState("");
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [activeTrackingToken, setActiveTrackingToken] = useState("");
   const [search, setSearch] = useState("");
   const [orderMeta, setOrderMeta] = useState(EMPTY_ORDER_META);
@@ -81,6 +82,7 @@ export function usePublicController({
     setTrackedOrder(null);
     setTrackingLoading(false);
     setTrackingError("");
+    setReviewSubmitting(false);
     setActiveTrackingToken("");
     setSearch("");
     setOrderMeta(EMPTY_ORDER_META);
@@ -352,6 +354,68 @@ export function usePublicController({
     await openCatalogFromRoute(storeId);
   }
 
+  async function submitTrackedOrderReview(rating, comment) {
+    const trackingToken = activeTrackingToken || trackedOrder?.trackingToken || "";
+    if (!trackingToken) {
+      showToast("Nao encontramos o link desta encomenda para guardar a avaliacao.");
+      return null;
+    }
+
+    setReviewSubmitting(true);
+
+    try {
+      const response = await orderService.submitStoreReview({
+        trackingToken,
+        rating,
+        comment,
+      });
+      updateSyncStatusFromResponse(response, "avaliacao");
+      const responseOrder = response?.order || null;
+      const nextOrder = responseOrder
+        ? {
+          ...(trackedOrder || {}),
+          ...responseOrder,
+          items: responseOrder.items || trackedOrder?.items || [],
+          store: responseOrder.store || trackedOrder?.store || null,
+          review: response?.review || responseOrder.review || trackedOrder?.review || null,
+        }
+        : trackedOrder
+          ? {
+            ...trackedOrder,
+            review: response?.review || trackedOrder.review || null,
+          }
+          : null;
+
+      if (nextOrder) {
+        setTrackedOrder(nextOrder);
+      }
+
+      showToast(
+        response?.review?.comment
+          ? "Avaliacao enviada. O teu comentario ja pode aparecer como testemunho."
+          : "Avaliacao guardada com sucesso.",
+      );
+
+      return nextOrder;
+    } catch (error) {
+      showToast(error.message || "Nao foi possivel guardar a avaliacao.");
+      throw error;
+    } finally {
+      setReviewSubmitting(false);
+    }
+  }
+
+  async function loadPublicStoreReviews(storeId, options = {}) {
+    const activeStoreId = String(storeId || sid || store?.id || "").trim();
+    if (!activeStoreId) {
+      throw new Error("A loja das avaliacoes e obrigatoria.");
+    }
+
+    const response = await orderService.getPublicStoreReviews(activeStoreId, options);
+    updateSyncStatusFromResponse(response, "catalogo_publico");
+    return response;
+  }
+
   function navigateBackFromCatalog() {
     resetOrderExperience();
     setCatalogMode("preview");
@@ -401,6 +465,7 @@ export function usePublicController({
       trackedOrder,
       trackingLoading,
       trackingError,
+      reviewSubmitting,
       activeTrackingToken,
       search,
       orderMeta,
@@ -429,6 +494,8 @@ export function usePublicController({
       handleTrackReceipt,
       handleOpenReceiptWhatsApp,
       handleBackToTrackedStore,
+      submitTrackedOrderReview,
+      loadPublicStoreReviews,
       navigateBackFromCatalog,
       setBlockedCatalog,
     },

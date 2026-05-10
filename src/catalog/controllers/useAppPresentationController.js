@@ -2,12 +2,18 @@ import { useEffect, useMemo } from "react";
 import { buildAbsoluteAppUrl, buildPublicCatalogPath } from "../utils/appRoutes.js";
 import { syncAppHead } from "../utils/appHead.js";
 import { createDisplayBrand } from "../utils/catalog.js";
-import { buildStorefrontCatalogUrl } from "../../../shared/storefront.js";
+import {
+  buildStorefrontCatalogUrl,
+  shouldPreferCurrentOriginForPublicLinks,
+} from "../../../shared/storefront.js";
 
 const TAB_LABELS = {
+  inicio: "Inicio",
   loja: "Loja",
   produtos: "Produtos",
   pedidos: "Pedidos",
+  avaliacoes: "Avaliacoes",
+  planos: "Planos",
   compartilhar: "Partilhar",
 };
 
@@ -60,10 +66,10 @@ function buildRouteHead({
     case "home":
       return {
         title: runtimeBrand?.name
-          ? `${runtimeBrand.name} | Web para clientes e app para lojistas`
-          : "Web para clientes e app para lojistas",
+          ? `${runtimeBrand.name} | Sua loja pronta para vender no WhatsApp`
+          : "Sua loja pronta para vender no WhatsApp",
         description:
-          "Entrada publica da plataforma com catalogos para clientes e painel instalavel para lojistas em /app.",
+          "Catalogo online com link profissional, pedidos mais claros e painel mobile para o lojista em /painel.",
         themeColor: runtimeBrand?.accent || themeColor,
         appTitle: runtimeBrand?.name || "Catalogo",
         canonicalUrl,
@@ -203,7 +209,7 @@ function buildRouteHead({
     default:
       return {
         title: buildStoreNavigationTitle(storeName, "Catalogo"),
-        description: "Sua loja no WhatsApp com catalogo digital, pedidos e painel do lojista.",
+        description: "Sua loja pronta para vender no WhatsApp com catalogo online e painel mobile.",
         themeColor,
         appTitle: storeName || runtimeBrand?.name || "Catalogo",
         canonicalUrl,
@@ -237,20 +243,26 @@ export function useAppPresentationController({
   setScreen,
 }) {
   const brand = useMemo(() => createDisplayBrand(runtimeBrand, store), [runtimeBrand, store]);
-  const catUrl = useMemo(
-    () =>
-      sid
-        ? buildStorefrontCatalogUrl(sid, store, {
-            origin:
-              typeof window !== "undefined"
-                ? window.location.origin
-                : buildAbsoluteAppUrl(buildPublicCatalogPath(sid)),
-            publicCatalogBaseUrl: runtimeConfig?.publicCatalogBaseUrl,
-            publicCatalogBaseDomain: runtimeConfig?.publicCatalogBaseDomain,
-          }) || buildAbsoluteAppUrl(buildPublicCatalogPath(sid))
-        : "",
-    [runtimeConfig?.publicCatalogBaseDomain, runtimeConfig?.publicCatalogBaseUrl, sid, store],
-  );
+  const catUrl = useMemo(() => {
+    if (!sid) return "";
+
+    const currentOrigin =
+      typeof window !== "undefined"
+        ? window.location.origin
+        : buildAbsoluteAppUrl(buildPublicCatalogPath(sid));
+    const preferCurrentOrigin = shouldPreferCurrentOriginForPublicLinks(currentOrigin, {
+      publicCatalogBaseUrl: runtimeConfig?.publicCatalogBaseUrl,
+      publicCatalogBaseDomain: runtimeConfig?.publicCatalogBaseDomain,
+    });
+
+    return (
+      buildStorefrontCatalogUrl(sid, store, {
+        origin: currentOrigin,
+        publicCatalogBaseUrl: preferCurrentOrigin ? "" : runtimeConfig?.publicCatalogBaseUrl,
+        publicCatalogBaseDomain: preferCurrentOrigin ? "" : runtimeConfig?.publicCatalogBaseDomain,
+      }) || buildAbsoluteAppUrl(buildPublicCatalogPath(sid))
+    );
+  }, [runtimeConfig?.publicCatalogBaseDomain, runtimeConfig?.publicCatalogBaseUrl, sid, store]);
   const connectionState = useMemo(
     () => ({
       isOnline,

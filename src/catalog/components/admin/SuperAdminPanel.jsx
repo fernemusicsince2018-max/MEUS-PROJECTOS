@@ -39,6 +39,7 @@ const EMPTY_SUMMARY = {
   activeClients: 0,
   suspendedClients: 0,
   publicStores: 0,
+  pendingAccessRequests: 0,
   activePlans: 0,
   trashedClients: 0,
   pendingPlanRequests: 0,
@@ -63,12 +64,12 @@ const SUPER_ADMIN_ACCESS_OPTIONS = Object.freeze([
   {
     key: "equipa",
     label: "Equipa",
-    description: "Abrir a area dos admins auxiliares.",
+    description: "Abrir a área dos admins auxiliares.",
   },
   {
     key: "financeiro",
     label: "Financeiro",
-    description: "Consultar eventos e historico financeiro.",
+    description: "Consultar eventos e histórico financeiro.",
   },
   {
     key: "lixo",
@@ -78,7 +79,7 @@ const SUPER_ADMIN_ACCESS_OPTIONS = Object.freeze([
   {
     key: "planos",
     label: "Planos",
-    description: "Criar e editar os planos comerciais.",
+    description: "Criar pacotes e ajustar precos sem mexer no codigo.",
   },
   {
     key: "configuracoes",
@@ -217,6 +218,7 @@ const PROFILE_IMAGE_DATA_URL_MAX_LENGTH = 400000;
 const PROFILE_IMAGE_MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024;
 const PROFILE_IMAGE_MAX_DIMENSION = 320;
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
+const PENDING_ACCESS_PREVIEW_LIMIT = 6;
 const SYSTEM_SETTING_LABELS = Object.freeze({
   support_whatsapp: "WhatsApp de suporte",
   trial_enabled: "Trial gratis para novas contas",
@@ -224,15 +226,33 @@ const SYSTEM_SETTING_LABELS = Object.freeze({
   default_plan_days: "Dias padrao do plano",
   maintenance_mode: "Modo de manutencao",
   app_maintenance: "Modo de manutencao",
-  merchant_registration_enabled: "Cadastro publico de lojistas",
+  merchant_registration_enabled: "Cadastro público de lojistas",
   max_free_products: "Limite de produtos gratis",
   payment_proof_deadline_hours: "Prazo do comprovativo",
-  payment_method_label: "Metodo de pagamento",
+  payment_method_label: "Metodo",
   payment_instructions: "Instrucoes de pagamento",
-  payment_bank_name: "Banco de recebimento",
-  payment_account_name: "Titular da conta",
-  payment_account_number: "Numero da conta",
-  payment_iban: "IBAN / referencia bancaria",
+  payment_bank_name: "Banco",
+  payment_account_name: "Titular",
+  payment_account_number: "Conta",
+  payment_iban: "IBAN",
+});
+
+const SYSTEM_SETTING_SORT_ORDER = Object.freeze({
+  support_whatsapp: 10,
+  trial_enabled: 20,
+  trial_days: 30,
+  default_plan_days: 31,
+  max_free_products: 40,
+  merchant_registration_enabled: 50,
+  maintenance_mode: 60,
+  app_maintenance: 61,
+  payment_proof_deadline_hours: 70,
+  payment_method_label: 71,
+  payment_bank_name: 72,
+  payment_account_name: 73,
+  payment_account_number: 74,
+  payment_iban: 75,
+  payment_instructions: 76,
 });
 
 const BOOLEAN_SETTING_DEFAULTS = Object.freeze({
@@ -285,6 +305,10 @@ function getPlanDefinition(plans, planId) {
 function supportsCountdownPlanStatus(planStatus) {
   const normalized = String(planStatus || "").trim().toLowerCase();
   return normalized === "active" || normalized === "trial";
+}
+
+function isPendingAccessClient(client) {
+  return !String(client?.storeId || "").trim();
 }
 
 function syncClientDraft(draft, plans) {
@@ -467,6 +491,15 @@ function formatSettingSummaryValue(key, value) {
   }
 
   return normalizedValue;
+}
+
+function sortSettingEntries(entries = []) {
+  return [...entries].sort(([leftKey], [rightKey]) => {
+    const leftOrder = SYSTEM_SETTING_SORT_ORDER[leftKey] ?? Number.MAX_SAFE_INTEGER;
+    const rightOrder = SYSTEM_SETTING_SORT_ORDER[rightKey] ?? Number.MAX_SAFE_INTEGER;
+    if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+    return String(leftKey || "").localeCompare(String(rightKey || ""), "pt", { sensitivity: "base" });
+  });
 }
 
 function isBooleanSettingKey(key) {
@@ -954,7 +987,7 @@ function ProfileModal({ user, onSave, onClose, accent, busy }) {
                 placeholder="https://cdn.exemplo.com/minha-foto.jpg"
               />
               <div style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                Se escolheres um ficheiro local, a imagem e otimizada automaticamente antes de guardar.
+                Se escolheres um ficheiro local, a imagem é otimizada automaticamente antes de guardar.
               </div>
             </div>
           </FLabel>
@@ -1127,6 +1160,7 @@ export default function SuperAdminPanel({
   const recentClients = data?.recentClients || [];
   const urgentClients = data?.urgentClients || [];
   const urgentClientsTotal = Number(data?.urgentClientsTotal || 0);
+  const rawPendingAccessRequests = data?.pendingAccessRequests || [];
   const adminUsers = data?.adminUsers || [];
   const adminPermissions = data?.permissions || { canManageAdminUsers: false, access: getDefaultSuperAdminAccess() };
   const financialEvents = data?.financialEvents || [];
@@ -1308,6 +1342,16 @@ export default function SuperAdminPanel({
     // Os clientes já vêm ordenados por data de criação do backend
     return recentClients.length ? recentClients : clients.slice(0, 3);
   }, [clients, recentClients]);
+  const pendingAccessRequests = React.useMemo(() => {
+    const source = rawPendingAccessRequests.length
+      ? rawPendingAccessRequests
+      : clients.filter(isPendingAccessClient).slice(0, PENDING_ACCESS_PREVIEW_LIMIT);
+    return source.filter(isPendingAccessClient);
+  }, [clients, rawPendingAccessRequests]);
+  const pendingAccessRequestCount = Math.max(
+    Number(summary.pendingAccessRequests || 0),
+    pendingAccessRequests.length,
+  );
   const loadedFinancialEvents = financialEvents.length;
   const totalFinancialEvents = Math.max(Number(financialEventPageInfo.total || 0), loadedFinancialEvents);
   const financialEventsSummaryText = totalFinancialEvents > loadedFinancialEvents
@@ -1329,7 +1373,10 @@ export default function SuperAdminPanel({
   }, [data?.settings]);
 
   const accent = brand.accent || "#1c9a74";
-  const settingsEntries = Object.entries(data?.settings || {});
+  const settingsEntries = React.useMemo(
+    () => sortSettingEntries(Object.entries(data?.settings || {})),
+    [data?.settings],
+  );
   const configuredSettings = settingsEntries.filter(([key]) => String(settingsDrafts[key] || "").trim() !== "");
   const settingsSummary = configuredSettings.slice(0, 4).map(([key]) => ({
     key,
@@ -1373,7 +1420,7 @@ export default function SuperAdminPanel({
       : Boolean(currentSuperAdminAccess[normalizedTab]);
 
     if (!allowed) {
-      if (toast) toast("Esta conta nao tem acesso a essa area.");
+      if (toast) toast("Esta conta não tem acesso a essa área.");
       return;
     }
 
@@ -1538,6 +1585,27 @@ export default function SuperAdminPanel({
     focusClientFromAlert(request?.userId || "", displayId);
   }
 
+  async function openPendingAccessRequest(client) {
+    const lookupValue = String(client?.email || client?.userId || "").trim();
+    const nextSignature = [lookupValue, "", ""].join("::");
+
+    openTab("clientes");
+    setDateFrom("");
+    setDateTo("");
+    setSearch(lookupValue);
+    lastClientsQuerySignatureRef.current = nextSignature;
+
+    if (lookupValue && onClientsQueryChange) {
+      await onClientsQueryChange({
+        search: lookupValue,
+        dateFrom: "",
+        dateTo: "",
+      });
+    }
+
+    setOpenClientFormUserId(client?.userId || "");
+  }
+
   function copyPlanRequestMessage(request) {
     const messageText = String(request?.messageText || "").trim();
     if (!messageText || typeof navigator === "undefined" || !navigator.clipboard?.writeText) return;
@@ -1557,7 +1625,7 @@ export default function SuperAdminPanel({
   function openPlanRequestProof(request) {
     const proofLink = String(request?.latestProof?.downloadUrl || "").trim();
     if (!proofLink || typeof window === "undefined") {
-      if (toast) toast("Este pedido ainda nao tem um comprovativo disponivel para abrir.");
+      if (toast) toast("Este pedido ainda não tem um comprovativo disponível para abrir.");
       return;
     }
     window.open(proofLink, "_blank", "noopener,noreferrer");
@@ -1849,7 +1917,7 @@ export default function SuperAdminPanel({
                   </Badge>
                 </div>
                 <div style={{ fontSize: "12px", color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
-                  Cada pedido guarda a referencia, o comprovativo enviado e as decisoes da revisao antes da ativacao.
+                  Cada pedido guarda a referência, o comprovativo enviado e as decisões da revisão antes da ativação.
                 </div>
               </div>
 
@@ -1882,7 +1950,7 @@ export default function SuperAdminPanel({
                         <div><strong style={{ color: "var(--color-text-primary)" }}>Referencia:</strong> {request.paymentReference || "Sem referencia"}</div>
                         <div><strong style={{ color: "var(--color-text-primary)" }}>Prazo do comprovativo:</strong> {formatDateTimeLabel(request.paymentDueAt) || "Sem prazo"}</div>
                         <div><strong style={{ color: "var(--color-text-primary)" }}>Email:</strong> {request.merchantEmail || "Sem email"}</div>
-                        <div><strong style={{ color: "var(--color-text-primary)" }}>WhatsApp da loja:</strong> {request.storeWhatsApp || "Sem numero configurado"}</div>
+                        <div><strong style={{ color: "var(--color-text-primary)" }}>WhatsApp da loja:</strong> {request.storeWhatsApp || "Sem número configurado"}</div>
                         <div><strong style={{ color: "var(--color-text-primary)" }}>Catalogo atual:</strong> {request.productCount} produto{request.productCount === 1 ? "" : "s"} · {formatPlanStatusLabel(request.currentPlanStatus)}{request.currentPlanName ? ` (${request.currentPlanName})` : ""}</div>
                       </div>
 
@@ -1916,7 +1984,7 @@ export default function SuperAdminPanel({
 
                       {request.reviewNote ? (
                         <div style={{ padding: "12px 14px", borderRadius: "16px", background: request.status === "needs_correction" ? "#fff7ed" : "#f8fafc", fontSize: "12px", color: "var(--color-text-primary)", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
-                          <strong style={{ display: "block", marginBottom: "6px" }}>Observacao da revisao</strong>
+                          <strong style={{ display: "block", marginBottom: "6px" }}>Observação da revisão</strong>
                           {request.reviewNote}
                         </div>
                       ) : null}
@@ -1938,7 +2006,7 @@ export default function SuperAdminPanel({
                         ) : null}
                         {onReviewPlanRequest ? (
                           <button type="button" disabled={busy || !latestProof} onClick={() => handlePlanRequestReviewAction(request, "under_review")} style={{ ...ACTION_BUTTON_STYLE, background: "var(--color-background-secondary)", color: "var(--color-text-primary)", opacity: busy || !latestProof ? 0.6 : 1, cursor: busy || !latestProof ? "not-allowed" : "pointer" }}>
-                            Em revisao
+                            Em revisão
                           </button>
                         ) : null}
                         {onReviewPlanRequest ? (
@@ -2071,7 +2139,7 @@ export default function SuperAdminPanel({
                   <Crown size={12} /> Super Admin
                 </div>
                 <div style={{ fontSize: "26px", lineHeight: 1.06, fontFamily: "var(--font-display)", fontWeight: "800", maxWidth: "620px" }}>
-                  Controlo central de clientes, acesso e catalogo comercial.
+                  Controlo central de clientes, acesso e catálogo comercial.
                 </div>
                 <div style={{ fontSize: "12px", opacity: 0.88, maxWidth: "500px", marginTop: "8px", lineHeight: 1.55 }}>
                   Gere a carteira de clientes, acompanha o estado das contas e define o plano certo para cada loja.
@@ -2090,6 +2158,7 @@ export default function SuperAdminPanel({
             <StatTile compact label="Ativos" value={summary.activeClients} hint="podem entrar" color={accent} />
             <StatTile compact label="Suspensos" value={summary.suspendedClients} hint="acesso bloqueado" color={accent} />
             <StatTile compact label="Lojas publicas" value={summary.publicStores} hint="abertas ao cliente" color={accent} />
+            <StatTile compact label="Pedidos de acesso" value={pendingAccessRequestCount} hint="contas sem loja" color={accent} />
             <StatTile compact label="Pagamentos" value={totalFinancialEvents} hint="ativacoes e renovacoes" color={accent} />
             <StatTile compact label="Planos ativos" value={summary.activePlans} hint="disponiveis para venda" color={accent} />
             <StatTile compact label="No lixo" value={summary.trashedClients} hint="prontas para recuperar" color={accent} />
@@ -2286,6 +2355,87 @@ export default function SuperAdminPanel({
               </div>
             </div>
 
+            <div style={{ ...SURFACE_STYLE, padding: "16px", display: "grid", gap: "14px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
+                <div style={{ maxWidth: "720px" }}>
+                  <div style={{ fontSize: "17px", fontWeight: "800", fontFamily: "var(--font-display)" }}>Pedidos de acesso</div>
+                  <div style={{ marginTop: "4px", fontSize: "12px", color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
+                    Contas criadas sem loja associada. Abre a ativacao para criar a loja, atribuir o primeiro plano e libertar o primeiro acesso do lojista.
+                  </div>
+                </div>
+                <Badge bg={pendingAccessRequestCount ? "#fff7ed" : "#f3f4f6"} color={pendingAccessRequestCount ? "#9a3412" : "#475569"}>
+                  <Store size={12} /> {pendingAccessRequestCount} pendente{pendingAccessRequestCount === 1 ? "" : "s"}
+                </Badge>
+              </div>
+
+              {pendingAccessRequests.length ? (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "12px" }}>
+                  {pendingAccessRequests.map((client) => (
+                    <div
+                      key={`pending-access-${client.userId}`}
+                      style={{
+                        padding: "14px",
+                        borderRadius: "18px",
+                        border: "1px solid #fdba74",
+                        background: "linear-gradient(135deg, #fff7ed 0%, #ffffff 100%)",
+                        display: "grid",
+                        gap: "10px",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "flex-start" }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: "15px", fontWeight: "800", fontFamily: "var(--font-display)" }}>
+                            {client.fullName || client.email || "Conta sem nome"}
+                          </div>
+                          <div style={{ marginTop: "4px", fontSize: "12px", color: "var(--color-text-secondary)", wordBreak: "break-word" }}>
+                            {client.email || "Sem email"}
+                          </div>
+                        </div>
+                        <Badge bg="#fff7ed" color="#9a3412">
+                          <Store size={12} /> Sem loja
+                        </Badge>
+                      </div>
+
+                      <div style={{ fontSize: "12px", color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
+                        Registo criado em {formatDateTimeLabel(client.createdAt) || "data indisponível"}.
+                      </div>
+
+                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                        <Badge bg={client.accountStatus === "active" ? "#dcfce7" : "#fee2e2"} color={client.accountStatus === "active" ? "#166534" : "#b91c1c"}>
+                          <ShieldCheck size={12} /> {client.accountStatus === "active" ? "Conta ativa" : "Conta suspensa"}
+                        </Badge>
+                        <Badge bg="#ffedd5" color="#9a3412">
+                          <AlertTriangle size={12} /> Pendente de criacao da loja
+                        </Badge>
+                      </div>
+
+                      <div style={{ fontSize: "12px", color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
+                        Esta conta ja existe, mas ainda precisa de loja e plano inicial antes do primeiro login no painel do lojista.
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => openPendingAccessRequest(client)}
+                        style={{ ...ACTION_BUTTON_STYLE, background: accent, color: "white", width: "100%" }}
+                      >
+                        Abrir ativacao
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ padding: "14px", borderRadius: "16px", background: "var(--color-background-secondary)", color: "var(--color-text-secondary)", fontSize: "12px", lineHeight: 1.6 }}>
+                  Nenhum pedido de acesso pendente agora. Assim que um novo lojista criar conta sem loja, ele aparece aqui.
+                </div>
+              )}
+
+              {pendingAccessRequestCount > pendingAccessRequests.length ? (
+                <div style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
+                  A mostrar os {pendingAccessRequests.length} pedidos mais recentes de um total de {pendingAccessRequestCount} conta{pendingAccessRequestCount === 1 ? "" : "s"} pendente{pendingAccessRequestCount === 1 ? "" : "s"}.
+                </div>
+              ) : null}
+            </div>
+
             {filteredClients.length ? (
               <>
               <div style={clientCardsContainerStyle}>
@@ -2301,9 +2451,16 @@ export default function SuperAdminPanel({
                 const planCountdown = getPlanCountdown(currentPlanStatus, currentPlanExpiresAt, countdownNow);
                 const planTimeRemaining = getPlanTimeRemaining(currentPlanStatus, currentPlanExpiresAt, countdownNow);
                 const isUrgentClient = isUrgentPlanCountdown(planCountdown, 3);
+                const isPendingStoreCreation = isPendingAccessClient(client);
                 const hasAssignedPlan = Boolean(draft.planId || client.planId);
                 const isClientFormVisible = openClientFormUserId === client.userId;
-                const formToggleLabel = isClientFormVisible ? "Esconder formulario" : (hasAssignedPlan ? "Mostrar formulario" : "Ativar plano");
+                const formToggleLabel = isClientFormVisible
+                  ? "Esconder formulario"
+                  : isPendingStoreCreation
+                    ? "Criar loja e ativar"
+                    : hasAssignedPlan
+                      ? "Mostrar formulario"
+                      : "Ativar plano";
                 return (
                   <div
                     key={client.userId}
@@ -2366,11 +2523,16 @@ export default function SuperAdminPanel({
                               <AlertTriangle size={12} /> Urgente
                             </Badge>
                           ) : null}
+                          {isPendingStoreCreation ? (
+                            <Badge bg="#ffedd5" color="#9a3412">
+                              <Store size={12} /> Pendente de criacao da loja
+                            </Badge>
+                          ) : null}
                           <Badge bg={client.accountStatus === "active" ? "#dcfce7" : "#fee2e2"} color={client.accountStatus === "active" ? "#166534" : "#b91c1c"}>
                             <ShieldCheck size={12} /> {client.accountStatus === "active" ? "Ativo" : "Suspenso"}
                           </Badge>
                           <Badge bg={client.publicEnabled ? "#dbeafe" : "#f3f4f6"} color={client.publicEnabled ? "#1d4ed8" : "#475569"}>
-                            <Globe size={12} /> {client.publicEnabled ? "Catalogo publico" : "Catalogo fechado"}
+                            <Globe size={12} /> {client.publicEnabled ? "Catálogo público" : "Catálogo fechado"}
                           </Badge>
                           {planCountdown ? (
                             <Badge bg={planCountdown.bg} color={planCountdown.color}>
@@ -2464,7 +2626,7 @@ export default function SuperAdminPanel({
 
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>
                       <FLabel label="ID de Identificação" hint="Define um código manual (ex: 6 dígitos) para este cliente.">
-                        <input value={draft.referenceId || ""} onChange={(event) => updateClientDraft(client.userId, { referenceId: event.target.value })} placeholder="Ex: 100205" style={FIELD_STYLE} />
+                        <input value={draft.referenceId || ""} onChange={(event) => updateClientDraft(client.userId, { referenceId: event.target.value })} placeholder="Ex.: 100205." style={FIELD_STYLE} />
                       </FLabel>
 
                       <FLabel label="Estado da conta">
@@ -2514,14 +2676,14 @@ export default function SuperAdminPanel({
                         </select>
                       </FLabel>
 
-                      <FLabel label="Catalogo publico">
+                      <FLabel label="Catálogo público">
                         <label style={{ ...FIELD_STYLE, display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
                           <input type="checkbox" checked={Boolean(draft.publicEnabled)} onChange={(event) => updateClientDraft(client.userId, { publicEnabled: event.target.checked })} />
-                          {draft.publicEnabled ? "Aberto para clientes" : "Fechado ao publico"}
+                          {draft.publicEnabled ? "Aberto para clientes" : "Fechado ao público"}
                         </label>
                       </FLabel>
 
-                      <FLabel label="Inicio do plano" hint="A data final e calculada automaticamente pela duracao escolhida.">
+                      <FLabel label="Início do plano" hint="A data final é calculada automaticamente pela duração escolhida.">
                         <input
                           type="date"
                           value={draft.planStartedAt || ""}
@@ -2545,7 +2707,7 @@ export default function SuperAdminPanel({
                     </div>
 
                     <FLabel label="Notas internas" hint="Estas notas ficam apenas no painel do super admin.">
-                      <textarea value={draft.internalNotes || ""} onChange={(event) => updateClientDraft(client.userId, { internalNotes: event.target.value })} style={TEXTAREA_STYLE} placeholder="Ex: cliente em onboarding, pagamento pendente, pedir logo nova..." />
+                      <textarea value={draft.internalNotes || ""} onChange={(event) => updateClientDraft(client.userId, { internalNotes: event.target.value })} style={TEXTAREA_STYLE} placeholder="Ex.: cliente em onboarding, pagamento pendente, pedir novo logo." />
                     </FLabel>
 
                     <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
@@ -2635,7 +2797,7 @@ export default function SuperAdminPanel({
                       value={newAdminUserDraft.fullName}
                       onChange={(event) => setNewAdminUserDraft((current) => ({ ...current, fullName: event.target.value }))}
                       style={FIELD_STYLE}
-                      placeholder="Ex: Maria do suporte"
+                      placeholder="Ex.: Maria do suporte."
                     />
                   </FLabel>
                   <FLabel label="Email de acesso">
@@ -2771,7 +2933,7 @@ export default function SuperAdminPanel({
                       <div style={{ minWidth: "220px", padding: "14px", borderRadius: "20px", background: "var(--color-background-secondary)" }}>
                         <div style={{ fontSize: "11px", color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Escopo do acesso</div>
                         <div style={{ marginTop: "6px", fontSize: "16px", fontWeight: "800", fontFamily: "var(--font-display)" }}>
-                          {adminUser.isProtected ? "Acesso total" : `${enabledAccessOptions.length} area${enabledAccessOptions.length === 1 ? "" : "s"} ativa${enabledAccessOptions.length === 1 ? "" : "s"}`}
+                          {adminUser.isProtected ? "Acesso total" : `${enabledAccessOptions.length} área${enabledAccessOptions.length === 1 ? "" : "s"} ativa${enabledAccessOptions.length === 1 ? "" : "s"}`}
                         </div>
                         <div style={{ marginTop: "10px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
                           {enabledAccessOptions.map((option) => (
@@ -3036,6 +3198,22 @@ export default function SuperAdminPanel({
 
         {tab === "planos" ? (
           <>
+            <div style={{ ...SURFACE_STYLE, padding: "20px", display: "grid", gap: "10px", background: "linear-gradient(135deg, rgba(12, 37, 34, 0.96) 0%, rgba(28, 154, 116, 0.92) 70%, rgba(240, 201, 120, 0.9) 180%)", color: "white" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                <Badge bg="rgba(255,255,255,0.14)" color="white" borderColor="rgba(255,255,255,0.14)">
+                  <Wallet size={12} /> Precos dos pacotes
+                </Badge>
+                <Badge bg="rgba(255,255,255,0.14)" color="white" borderColor="rgba(255,255,255,0.14)">
+                  <Settings size={12} /> Sem mexer no codigo
+                </Badge>
+              </div>
+              <div style={{ fontSize: "22px", fontWeight: "800", fontFamily: "var(--font-display)" }}>
+                Os pacotes comerciais podem ser criados e ter o preco alterado aqui no painel.
+              </div>
+              <div style={{ fontSize: "13px", opacity: 0.92, maxWidth: "760px", lineHeight: 1.7 }}>
+                Sempre que o super admin guardar um novo preco, a base atualiza e a aba de planos do lojista passa a mostrar o novo valor automaticamente. Nao e preciso voltar ao codigo para trocar os precos.
+              </div>
+            </div>
             {/* Seção de Criação de Novos Planos */}
             <div style={{ ...SURFACE_STYLE, padding: "20px", display: "grid", gap: "16px", borderLeft: `4px solid ${accent}` }}>
               <div>
@@ -3077,7 +3255,7 @@ export default function SuperAdminPanel({
                 <FLabel label="Nome">
                   <input value={newPlanDraft.name} onChange={(event) => setNewPlanDraft({ ...newPlanDraft, name: event.target.value })} placeholder="Enterprise" style={FIELD_STYLE} />
                 </FLabel>
-                <FLabel label="Valor base / 30 dias" hint="Ex: 5.000 Kz por cada bloco de 30 dias.">
+                <FLabel label="Preco do pacote / 30 dias" hint="Ex: 5.000 Kz por cada bloco de 30 dias.">
                   <input type="number" min="0" step="0.01" value={newPlanDraft.priceMonthly} onChange={(event) => setNewPlanDraft({ ...newPlanDraft, priceMonthly: event.target.value })} style={FIELD_STYLE} />
                 </FLabel>
                 <FLabel label="Moeda">
@@ -3098,26 +3276,26 @@ export default function SuperAdminPanel({
               </div>
 
               <FLabel label="Descricao">
-                <textarea value={newPlanDraft.description} onChange={(event) => setNewPlanDraft({ ...newPlanDraft, description: event.target.value })} style={TEXTAREA_STYLE} placeholder="Descreve o publico ideal, suporte e principais limites." />
+                <textarea value={newPlanDraft.description} onChange={(event) => setNewPlanDraft({ ...newPlanDraft, description: event.target.value })} style={TEXTAREA_STYLE} placeholder="Descreve o público ideal, suporte e principais limites." />
               </FLabel>
 
               <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
                 <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "var(--color-text-primary)" }}>
                   <input type="checkbox" checked={newPlanDraft.active} onChange={(event) => setNewPlanDraft({ ...newPlanDraft, active: event.target.checked })} />
-                  Plano disponivel para atribuicao
+                  Plano disponível para atribuição
                 </label>
                 <button onClick={handleCreatePlan} disabled={busy} style={{ ...ACTION_BUTTON_STYLE, background: accent, color: "white" }}>
-                  {busy ? "A guardar..." : "Criar plano"}
+                  {busy ? "A guardar..." : "Criar pacote"}
                 </button>
               </div>
                 </>
               ) : (
                 <div style={{ padding: "14px 16px", borderRadius: "16px", border: "0.5px dashed var(--color-border-tertiary)", color: "var(--color-text-secondary)", fontSize: "12px", lineHeight: 1.6 }}>
                   <div style={{ display: "grid", gap: "10px" }}>
-                    <PreviewLine label="Codigo" value={newPlanDraft.code || "Sem codigo"} />
+                    <PreviewLine label="Código" value={newPlanDraft.code || "Sem código"} />
                     <PreviewLine label="Nome" value={newPlanDraft.name || "Sem nome"} />
                     <PreviewLine
-                      label="Valor base"
+                      label="Preco do pacote"
                       value={newPlanDraft.priceMonthly ? formatMoney(newPlanDraft.priceMonthly, newPlanDraft.currencyCode || "AOA") : "Sem preco"}
                     />
                     <PreviewLine label="Estado" value={newPlanDraft.active ? "Disponivel para atribuicao" : "Arquivado"} />
@@ -3130,7 +3308,7 @@ export default function SuperAdminPanel({
             <div style={{ marginTop: "12px", display: "grid", gap: "20px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", padding: "0 4px", flexWrap: "wrap" }}>
                 <div style={{ fontSize: "14px", fontWeight: "700", color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                  Planos Configurados ({plans.length})
+                  Pacotes Configurados ({plans.length})
                 </div>
                 <button
                   type="button"
@@ -3173,7 +3351,7 @@ export default function SuperAdminPanel({
                         </Badge>
                       </div>
                       <div style={{ marginTop: "4px", fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                        Custo base: <span style={{ fontWeight: "700", color: "var(--color-text-primary)" }}>{formatMoney(plan.priceMonthly, plan.currencyCode)}</span> / 30 dias
+                        Preco atual: <span style={{ fontWeight: "700", color: "var(--color-text-primary)" }}>{formatMoney(plan.priceMonthly, plan.currencyCode)}</span> / 30 dias
                       </div>
                     </div>
 
@@ -3217,7 +3395,7 @@ export default function SuperAdminPanel({
                         <FLabel label="Nome">
                           <input value={draft.name} onChange={(event) => setPlanDrafts((current) => ({ ...current, [plan.id]: { ...draft, name: event.target.value } }))} style={FIELD_STYLE} />
                         </FLabel>
-                        <FLabel label="Valor base / 30 dias" hint="O cliente pode ativar 30, 60, 90 dias ou mais na aba de clientes.">
+                        <FLabel label="Preco do pacote / 30 dias" hint="O cliente pode ativar 30, 60, 90 dias ou mais na aba de clientes.">
                           <input type="number" min="0" step="0.01" value={draft.priceMonthly} onChange={(event) => setPlanDrafts((current) => ({ ...current, [plan.id]: { ...draft, priceMonthly: event.target.value } }))} style={FIELD_STYLE} />
                         </FLabel>
                         <FLabel label="Moeda">
@@ -3260,17 +3438,17 @@ export default function SuperAdminPanel({
                           </Badge>
                         </div>
                         <button onClick={() => handlePlanSave(plan.id)} disabled={busy} style={{ ...ACTION_BUTTON_STYLE, background: accent, color: "white" }}>
-                          {busy ? "A guardar..." : "Guardar plano"}
+                          {busy ? "A guardar..." : "Guardar pacote"}
                         </button>
                       </div>
                     </>
                   ) : (
                     <div style={{ padding: "14px 16px", borderRadius: "16px", border: "0.5px dashed var(--color-border-tertiary)", color: "var(--color-text-secondary)", fontSize: "12px", lineHeight: 1.6 }}>
                       <div style={{ display: "grid", gap: "10px" }}>
-                        <PreviewLine label="Codigo" value={draft.code || "Sem codigo"} />
+                        <PreviewLine label="Código" value={draft.code || "Sem código"} />
                         <PreviewLine label="Nome" value={draft.name || "Sem nome"} />
                         <PreviewLine
-                          label="Valor base"
+                          label="Preco do pacote"
                           value={draft.priceMonthly ? formatMoney(draft.priceMonthly, draft.currencyCode || "AOA") : "Sem preco"}
                         />
                         <PreviewLine label="Estado" value={draft.active ? "Disponivel" : "Arquivado"} />
@@ -3306,14 +3484,14 @@ export default function SuperAdminPanel({
               <div>
                 <div style={{ fontSize: "18px", fontWeight: "800", marginBottom: "6px" }}>Trial gratuito para novas contas</div>
                 <div style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                  Liga ou desliga o acesso automatico aos 7 dias gratis quando um novo lojista cria conta.
+                  Liga ou desliga o acesso automático aos 7 dias grátis quando um novo lojista cria conta.
                 </div>
               </div>
               <ToggleTile
                 label={parseBooleanSettingDraft("trial_enabled", settingsDrafts.trial_enabled) ? "Trial ativo" : "Trial desativado"}
                 description={
                   parseBooleanSettingDraft("trial_enabled", settingsDrafts.trial_enabled)
-                    ? "Novas contas recebem os 7 dias gratis automaticamente."
+                    ? "Novas contas recebem os 7 dias grátis automaticamente."
                     : "Novas contas entram sem trial e precisam assinar um plano pago para desbloquear a operacao."
                 }
                 checked={parseBooleanSettingDraft("trial_enabled", settingsDrafts.trial_enabled)}
@@ -3326,7 +3504,7 @@ export default function SuperAdminPanel({
             </div>
             <div style={{ ...SURFACE_STYLE, padding: "20px", display: "grid", gap: "14px" }}>
               <div>
-                <div style={{ fontSize: "18px", fontWeight: "800", marginBottom: "6px" }}>Cadastro publico de lojistas</div>
+                <div style={{ fontSize: "18px", fontWeight: "800", marginBottom: "6px" }}>Cadastro público de lojistas</div>
                 <div style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
                   Controla se qualquer lojista pode criar conta sozinho na tela de autenticacao.
                 </div>
@@ -3373,7 +3551,7 @@ export default function SuperAdminPanel({
               </div>
               {isSystemSettingsOpen ? (
                 <div style={{ display: "grid", gap: "20px" }}>
-                {Object.entries(data?.settings || {}).map(([key, info]) => (
+                {settingsEntries.map(([key, info]) => (
                   <div key={key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "20px", paddingBottom: "16px", borderBottom: "0.5px solid var(--color-border-tertiary)" }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: "700", fontSize: "14px" }}>{formatSettingLabel(key)}</div>

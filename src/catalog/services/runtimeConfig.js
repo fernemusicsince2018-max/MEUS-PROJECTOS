@@ -86,7 +86,7 @@ export function getRuntimeConfig() {
       tagline:
         globalConfig.brandTagline ||
         readEnv("VITE_BRAND_TAGLINE") ||
-        "Sua loja no WhatsApp.",
+        "Vende mais no WhatsApp.",
       accent: globalConfig.brandAccent || readEnv("VITE_BRAND_ACCENT") || "#25ae82",
       dark: globalConfig.brandDark || readEnv("VITE_BRAND_DARK") || "#1b1c48",
       highlight: globalConfig.brandHighlight || readEnv("VITE_BRAND_HIGHLIGHT") || "#ffc61a",

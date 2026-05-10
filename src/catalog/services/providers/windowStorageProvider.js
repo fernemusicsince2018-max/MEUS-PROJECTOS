@@ -11,5 +11,9 @@ export function createWindowStorageProvider() {
       if (!storage?.set) return null;
       return storage.set(key, value);
     },
+    async remove(key) {
+      if (!storage?.remove) return null;
+      return storage.remove(key);
+    },
   };
 }

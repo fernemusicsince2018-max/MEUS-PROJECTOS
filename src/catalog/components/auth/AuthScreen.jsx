@@ -300,7 +300,7 @@ export default function AuthScreen({
     const phone = registerForm.phone.trim();
     const emailReady = email.includes("@") && email.includes(".");
     const phoneDigits = phone.replace(/\D/g, "");
-    const phoneValidation = validatePhoneForCountry(registerCountry, phone, "O numero de telemovel");
+    const phoneValidation = validatePhoneForCountry(registerCountry, phone, "O número de telemóvel");
     const phoneReady = Boolean(phoneValidation.normalized);
     const phoneStatus = phoneDigits.length >= 8 && phoneValidation.error
       ? buildInvalidFieldStatus(phoneValidation.error)
@@ -334,7 +334,7 @@ export default function AuthScreen({
         if (cancelled) return;
         setRegisterAvailability({
           email: emailReady ? { state: "invalid", available: false, message: availabilityError.message || "Nao foi possivel validar o email." } : EMPTY_REGISTER_FIELD_STATUS,
-          phone: phoneReady ? { state: "invalid", available: false, message: availabilityError.message || "Nao foi possivel validar o numero de telemovel." } : phoneStatus,
+          phone: phoneReady ? { state: "invalid", available: false, message: availabilityError.message || "Não foi possível validar o número de telemóvel." } : phoneStatus,
         });
       }
     }, 350);
@@ -405,7 +405,7 @@ export default function AuthScreen({
         password: loginForm.password,
       });
     } catch (submitError) {
-      setError(submitError.message || "Nao foi possivel iniciar sessao.");
+      setError(submitError.message || "Não foi possível iniciar sessão.");
     }
   }
 
@@ -429,13 +429,13 @@ export default function AuthScreen({
       return;
     }
 
-    const phoneResult = validatePhoneForCountry(registerCountry, registerForm.phone.trim(), "O numero de telemovel");
+    const phoneResult = validatePhoneForCountry(registerCountry, registerForm.phone.trim(), "O número de telemóvel");
     if (phoneResult.error) {
       setError(phoneResult.error);
       return;
     }
     if (!phoneResult.normalized) {
-      setError("O numero de telemovel e obrigatorio.");
+      setError("O número de telemóvel é obrigatório.");
       return;
     }
 
@@ -445,7 +445,7 @@ export default function AuthScreen({
     }
 
     if (registerAvailability.phone.state === "taken" || registerAvailability.phone.state === "invalid") {
-      setError(registerAvailability.phone.message || "Corrige o numero de telemovel antes de continuar.");
+      setError(registerAvailability.phone.message || "Corrige o número de telemóvel antes de continuar.");
       return;
     }
 
@@ -487,7 +487,7 @@ export default function AuthScreen({
       const response = await onRequestPasswordReset({
         email: resetForm.email.trim(),
       });
-      setInfo(response?.message || "Se existir conta com este email, enviamos um link de recuperacao.");
+      setInfo(response?.message || "Se existir uma conta com este email, enviamos um link de recuperacao.");
       setDevResetCode(response?.resetCode || "");
       setDevResetLink(response?.resetLink || "");
     } catch (submitError) {
@@ -505,7 +505,7 @@ export default function AuthScreen({
     }
 
     if (!resetForm.token.trim() && !resetForm.code.trim()) {
-      setError("Abre o link do email ou indica o codigo de recuperacao.");
+      setError("Abre o link do email ou indica o código de recuperação.");
       return;
     }
 
@@ -558,21 +558,21 @@ export default function AuthScreen({
 
           <div style={{ marginTop: "72px", maxWidth: "520px" }}>
             <div style={{ fontSize: "12px", letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: "800", opacity: 0.8, marginBottom: "14px" }}>
-              {brand.tagline || "Sua loja no WhatsApp"}
+              {brand.tagline || "Vende mais no WhatsApp"}
             </div>
             <div style={{ fontSize: "42px", lineHeight: 1.02, fontWeight: "800", fontFamily: "var(--font-display)" }}>
-              Cada loja entra com conta. O cliente compra sem login.
+              A tua loja pronta para vender.
             </div>
             <div style={{ marginTop: "16px", fontSize: "15px", opacity: 0.9, maxWidth: "470px" }}>
-              Cria uma conta para gerir a tua loja, produtos e link do catalogo. Os teus clientes entram direto no catalogo e enviam o pedido pelo WhatsApp.
+              Cria o catalogo, atrai clientes e recebe pedidos no WhatsApp.
             </div>
           </div>
 
           <div style={{ display: "grid", gap: "14px", marginTop: "42px", maxWidth: "460px" }}>
             {[
-              ["Uma conta por loja", "Cada lojista entra no proprio painel e grava os dados no PostgreSQL.", Store],
-              ["Sessao protegida", "O acesso ao painel admin fica protegido por login, bloqueio por tentativas e sessao segura.", ShieldCheck],
-              ["Recuperacao segura", "Se esqueceres a palavra-passe, podes gerar um codigo temporario e trocar a credencial.", KeyRound],
+              ["Uma conta por loja", "Cada lojista entra no proprio painel e guarda os dados da loja com seguranca.", Store],
+              ["Sessão protegida", "O acesso ao painel admin fica protegido por login, bloqueio por tentativas e sessão segura.", ShieldCheck],
+              ["Recuperação segura", "Se esqueceres a palavra-passe, podes gerar um código temporário e trocar a credencial.", KeyRound],
             ].map(([title, copy, Icon]) => (
               <div key={title} style={{ padding: "16px 18px", borderRadius: "22px", background: "rgba(255,255,255,0.12)", backdropFilter: "blur(8px)", display: "flex", gap: "12px", alignItems: "flex-start" }}>
                 <div style={{ width: "38px", height: "38px", borderRadius: "14px", background: "rgba(255,255,255,0.16)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -696,7 +696,7 @@ export default function AuthScreen({
                     data-testid="auth-register-store-name"
                     value={registerForm.storeName}
                     onChange={(event) => setRegisterForm({ ...registerForm, storeName: event.target.value })}
-                    placeholder="Ex: Boutique Kastro"
+                    placeholder="Ex.: Boutique Kastro."
                     style={FIELD_STYLE}
                   />
                 </label>
@@ -732,7 +732,7 @@ export default function AuthScreen({
                 </label>
 
                 <label style={{ display: "grid", gap: "8px" }}>
-                  <span style={{ fontSize: "12px", fontWeight: "700" }}>Pais do telemovel</span>
+                  <span style={{ fontSize: "12px", fontWeight: "700" }}>País do telemóvel</span>
                   <select
                     data-testid="auth-register-country"
                     value={registerCountry}
@@ -785,8 +785,8 @@ export default function AuthScreen({
                   </div>
                   <div style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
                     {registerDialCode
-                      ? `Escreve o numero sem o codigo do pais. Juntamos +${registerDialCode} automaticamente.`
-                      : "Usa o numero com codigo do pais para podermos validar e criar a loja corretamente."}
+                      ? `Escreve o número sem o código do país. Juntamos +${registerDialCode} automaticamente.`
+                      : "Usa o número com código do país para podermos validar e criar a loja corretamente."}
                   </div>
                   {registerAvailability.phone.message ? (
                     <div style={{ fontSize: "11px", color: getFieldStatusColor(registerAvailability.phone) }}>

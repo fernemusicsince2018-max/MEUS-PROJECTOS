@@ -152,9 +152,6 @@ export function useAppShellController({
 
     setOfflineState(null);
     const route = readAppRoute();
-    if (route.fromLegacyHash && route.canonicalPath) {
-      navigateToPath(route.canonicalPath, { replace: true });
-    }
 
     if (route.kind === "home") {
       setScreen("home");
@@ -307,7 +304,7 @@ export function useAppShellController({
       if (activeSession?.user?.role === "super_admin") {
         getActions(superAdminBridgeRef).setSuperAdminTab?.("clientes");
       } else {
-        getActions(merchantBridgeRef).setTab?.("loja");
+        getActions(merchantBridgeRef).setTab?.("inicio");
       }
       showToast("Sessao iniciada com sucesso.");
     } finally {
@@ -331,7 +328,7 @@ export function useAppShellController({
       if (response?.user?.role === "super_admin") {
         getActions(superAdminBridgeRef).setSuperAdminTab?.("clientes");
       } else {
-        getActions(merchantBridgeRef).setTab?.("loja");
+        getActions(merchantBridgeRef).setTab?.("inicio");
       }
       showToast("Conta criada com sucesso.");
       return response;
@@ -428,13 +425,11 @@ export function useAppShellController({
     };
 
     window.addEventListener("popstate", handleLocationChange);
-    window.addEventListener("hashchange", handleLocationChange);
     window.addEventListener("online", handleNetworkOnline);
     window.addEventListener("offline", handleNetworkOffline);
 
     return () => {
       window.removeEventListener("popstate", handleLocationChange);
-      window.removeEventListener("hashchange", handleLocationChange);
       window.removeEventListener("online", handleNetworkOnline);
       window.removeEventListener("offline", handleNetworkOffline);
     };

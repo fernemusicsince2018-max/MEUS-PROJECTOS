@@ -6,6 +6,8 @@ import { getSystemSettings } from "./_settings.js";
 const scrypt = promisify(scryptCallback);
 const SESSION_COOKIE = "catalog_session";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 14;
+const DEFAULT_SESSION_CONTEXT_CACHE_TTL_MS = 30000;
+const DEFAULT_SESSION_TOUCH_INTERVAL_SECONDS = 900;
 const SUPER_ADMIN_ACCESS_KEYS = Object.freeze(["clientes", "equipa", "financeiro", "lixo", "planos", "configuracoes"]);
 const SUPER_ADMIN_ACCESS_KEY_SET = new Set(SUPER_ADMIN_ACCESS_KEYS);
 const DEFAULT_SUPER_ADMIN_ACCESS = Object.freeze({
@@ -24,6 +26,49 @@ const FULL_SUPER_ADMIN_ACCESS = Object.freeze({
   planos: true,
   configuracoes: true,
 });
+const AUTH_STATE_KEY = "__catalogAuthState";
+const authState = globalThis[AUTH_STATE_KEY] || (globalThis[AUTH_STATE_KEY] = {
+  sessionContextByTokenHash: new Map(),
+  tokenHashesByUserId: new Map(),
+});
+
+if (!(authState.sessionContextByTokenHash instanceof Map)) {
+  authState.sessionContextByTokenHash = new Map();
+}
+
+if (!(authState.tokenHashesByUserId instanceof Map)) {
+  authState.tokenHashesByUserId = new Map();
+}
+
+function parsePositiveInteger(value, fallback, minimum = 1) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  const rounded = Math.floor(numeric);
+  if (rounded < minimum) return fallback;
+  return rounded;
+}
+
+function toTimestamp(value) {
+  if (!value) return Number.NaN;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? Number.NaN : date.getTime();
+}
+
+function getSessionContextCacheTtlMs() {
+  return parsePositiveInteger(
+    process.env.SESSION_CONTEXT_CACHE_TTL_MS,
+    DEFAULT_SESSION_CONTEXT_CACHE_TTL_MS,
+    1000,
+  );
+}
+
+function getSessionTouchIntervalMs() {
+  return parsePositiveInteger(
+    process.env.SESSION_LAST_USED_TOUCH_INTERVAL_SECONDS,
+    DEFAULT_SESSION_TOUCH_INTERVAL_SECONDS,
+    60,
+  ) * 1000;
+}
 
 function normalizeUserRole(value) {
   return String(value || "").trim().toLowerCase() === "super_admin" ? "super_admin" : "merchant";
@@ -233,6 +278,139 @@ function hashSessionToken(token) {
   return createHash("sha256").update(token).digest("hex");
 }
 
+function cloneSessionContext(sessionLike) {
+  if (!sessionLike || typeof sessionLike !== "object") return null;
+
+  return {
+    ...sessionLike,
+    superAdminAccess:
+      sessionLike.superAdminAccess && typeof sessionLike.superAdminAccess === "object"
+        ? { ...sessionLike.superAdminAccess }
+        : getEmptySuperAdminAccess(),
+  };
+}
+
+function trackSessionTokenHashForUser(userId, tokenHash) {
+  const normalizedUserId = String(userId || "").trim();
+  const normalizedTokenHash = String(tokenHash || "").trim();
+  if (!normalizedUserId || !normalizedTokenHash) return;
+
+  const tokenHashes = authState.tokenHashesByUserId.get(normalizedUserId) || new Set();
+  tokenHashes.add(normalizedTokenHash);
+  authState.tokenHashesByUserId.set(normalizedUserId, tokenHashes);
+}
+
+function untrackSessionTokenHashForUser(userId, tokenHash) {
+  const normalizedUserId = String(userId || "").trim();
+  const normalizedTokenHash = String(tokenHash || "").trim();
+  if (!normalizedUserId || !normalizedTokenHash) return;
+
+  const tokenHashes = authState.tokenHashesByUserId.get(normalizedUserId);
+  if (!tokenHashes) return;
+
+  tokenHashes.delete(normalizedTokenHash);
+  if (!tokenHashes.size) {
+    authState.tokenHashesByUserId.delete(normalizedUserId);
+  }
+}
+
+function writeCachedSessionContext(tokenHash, sessionContext) {
+  const normalizedTokenHash = String(tokenHash || "").trim();
+  const ttlMs = getSessionContextCacheTtlMs();
+  if (!normalizedTokenHash || !sessionContext || ttlMs < 1) {
+    return;
+  }
+
+  const clonedSession = cloneSessionContext(sessionContext);
+  authState.sessionContextByTokenHash.set(normalizedTokenHash, {
+    expiresAt: Date.now() + ttlMs,
+    session: clonedSession,
+  });
+  trackSessionTokenHashForUser(clonedSession?.userId, normalizedTokenHash);
+}
+
+function deleteCachedSessionContextByTokenHash(tokenHash) {
+  const normalizedTokenHash = String(tokenHash || "").trim();
+  if (!normalizedTokenHash) return;
+
+  const cached = authState.sessionContextByTokenHash.get(normalizedTokenHash);
+  if (cached?.session?.userId) {
+    untrackSessionTokenHashForUser(cached.session.userId, normalizedTokenHash);
+  }
+  authState.sessionContextByTokenHash.delete(normalizedTokenHash);
+}
+
+function deleteCachedSessionContextsByUserId(userId) {
+  const normalizedUserId = String(userId || "").trim();
+  if (!normalizedUserId) return;
+
+  const tokenHashes = authState.tokenHashesByUserId.get(normalizedUserId);
+  if (!tokenHashes) return;
+
+  for (const tokenHash of tokenHashes) {
+    authState.sessionContextByTokenHash.delete(tokenHash);
+  }
+  authState.tokenHashesByUserId.delete(normalizedUserId);
+}
+
+function readCachedSessionContext(tokenHash, referenceNow = Date.now()) {
+  const normalizedTokenHash = String(tokenHash || "").trim();
+  if (!normalizedTokenHash || getSessionContextCacheTtlMs() < 1) {
+    return null;
+  }
+
+  const cached = authState.sessionContextByTokenHash.get(normalizedTokenHash);
+  if (!cached?.session) return null;
+
+  const nowTimestamp = Number.isFinite(Number(referenceNow))
+    ? Number(referenceNow)
+    : Date.now();
+  const expiresAtTimestamp = toTimestamp(cached.session.expiresAt);
+  if (
+    cached.expiresAt <= nowTimestamp
+    || (Number.isFinite(expiresAtTimestamp) && expiresAtTimestamp <= nowTimestamp)
+  ) {
+    deleteCachedSessionContextByTokenHash(normalizedTokenHash);
+    return null;
+  }
+
+  return cloneSessionContext(cached.session);
+}
+
+function shouldTouchSession(lastUsedAt, referenceNow = new Date(), intervalMs = getSessionTouchIntervalMs()) {
+  if (intervalMs < 1) return false;
+
+  const nowTimestamp = Number.isFinite(toTimestamp(referenceNow))
+    ? toTimestamp(referenceNow)
+    : Date.now();
+  const lastUsedTimestamp = toTimestamp(lastUsedAt);
+  if (!Number.isFinite(lastUsedTimestamp)) {
+    return true;
+  }
+
+  return nowTimestamp - lastUsedTimestamp >= intervalMs;
+}
+
+async function touchSessionIfNeeded(queryable, sessionId, lastUsedAt, referenceNow = new Date()) {
+  if (!shouldTouchSession(lastUsedAt, referenceNow)) {
+    return false;
+  }
+
+  const nowTimestamp = Number.isFinite(toTimestamp(referenceNow))
+    ? toTimestamp(referenceNow)
+    : Date.now();
+  const thresholdIso = new Date(nowTimestamp - getSessionTouchIntervalMs()).toISOString();
+  const result = await queryable.query(
+    `update catalog_sessions
+     set last_used_at = now()
+     where id = $1
+       and coalesce(last_used_at, to_timestamp(0)) <= $2::timestamptz`,
+    [sessionId, thresholdIso],
+  );
+
+  return result.rowCount > 0;
+}
+
 function buildSessionCookie(token, maxAge = SESSION_MAX_AGE_SECONDS) {
   const parts = [
     `${SESSION_COOKIE}=${encodeURIComponent(token)}`,
@@ -305,7 +483,7 @@ function generateReferenceId() {
 
 async function ensureStoreForUser(connection, userId, preferredName = "") {
   const existing = await connection.query(
-    `select id, name, deleted_at
+    `select id, name, deleted_at, plan_status, plan_expires_at, reference_id
      from catalog_stores
      where owner_user_id = $1
      limit 1`,
@@ -344,7 +522,7 @@ async function ensureStoreForUser(connection, userId, preferredName = "") {
            reference_id
          )
          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-         returning id, name`,
+         returning id, name, plan_status, plan_expires_at, reference_id`,
         [
           storeId, userId, preferredName || "", "#16a34a", 
           null, initialPlanStatus,
@@ -355,7 +533,7 @@ async function ensureStoreForUser(connection, userId, preferredName = "") {
       );
       return created.rows[0];
     } catch (error) {
-      // Erro 23505 é Unique Violation no PostgreSQL
+      // Erro 23505 indica violacao de unicidade na base de dados
       if (error.code === "23505") {
         continue; 
       }
@@ -366,6 +544,74 @@ async function ensureStoreForUser(connection, userId, preferredName = "") {
   throw new Error("Não foi possível gerar um identificador único para a loja. Tente novamente.");
 }
 
+async function ensureSessionStoreContext(queryable, sessionLike, ensureStore = ensureStoreForUser) {
+  const role = getEffectiveUserRole(sessionLike);
+  const currentStoreId = String(sessionLike?.store_id || sessionLike?.storeId || "").trim();
+  if (role === "super_admin" || currentStoreId) {
+    return sessionLike;
+  }
+
+  const userId = String(sessionLike?.user_id || sessionLike?.userId || "").trim();
+  if (!userId) {
+    return sessionLike;
+  }
+
+  const preferredName = String(
+    sessionLike?.store_name
+      || sessionLike?.storeName
+      || sessionLike?.full_name
+      || sessionLike?.fullName
+      || sessionLike?.email
+      || "",
+  ).trim();
+
+  const store = await ensureStore(queryable, userId, preferredName);
+  return {
+    ...sessionLike,
+    store_id: String(store?.id || currentStoreId || ""),
+    store_name: String(store?.name || sessionLike?.store_name || sessionLike?.storeName || ""),
+    plan_status:
+      sessionLike?.plan_status
+      || sessionLike?.planStatus
+      || store?.plan_status
+      || store?.planStatus
+      || null,
+    plan_expires_at:
+      sessionLike?.plan_expires_at
+      || sessionLike?.planExpiresAt
+      || store?.plan_expires_at
+      || store?.planExpiresAt
+      || null,
+    reference_id:
+      sessionLike?.reference_id
+      || sessionLike?.referenceId
+      || store?.reference_id
+      || store?.referenceId
+      || "",
+  };
+}
+
+function buildSessionContext(sessionLike, tokenHash) {
+  return {
+    sessionId: sessionLike.session_id,
+    userId: sessionLike.user_id,
+    email: sessionLike.email,
+    fullName: sessionLike.full_name || "",
+    avatarUrl: sessionLike.avatar_url || "",
+    role: getEffectiveUserRole(sessionLike),
+    superAdminAccess: getResolvedSuperAdminAccess(sessionLike),
+    accountStatus: normalizeAccountStatus(sessionLike.account_status),
+    storeId: sessionLike.store_id || "",
+    storeName: sessionLike.store_name || "",
+    planStatus: sessionLike.plan_status,
+    planExpiresAt: sessionLike.plan_expires_at,
+    referenceId: sessionLike.reference_id || "",
+    tokenHash,
+    expiresAt: sessionLike.expires_at || null,
+    lastUsedAt: sessionLike.last_used_at || null,
+  };
+}
+
 async function getSessionContext(event) {
   const token = parseCookies(event)[SESSION_COOKIE];
   if (!token) return null;
@@ -373,6 +619,11 @@ async function getSessionContext(event) {
   await ensureDatabaseReady();
   const pool = getPool();
   const tokenHash = hashSessionToken(token);
+  const cachedSessionContext = readCachedSessionContext(tokenHash);
+  if (cachedSessionContext) {
+    return cachedSessionContext;
+  }
+
   const hasSuperAdminAccessColumn = await hasColumn(pool, "catalog_users", "super_admin_access");
   const superAdminAccessSelectSql = hasSuperAdminAccessColumn
     ? "users.super_admin_access,"
@@ -381,6 +632,8 @@ async function getSessionContext(event) {
      `select
         sessions.id as session_id,
         sessions.user_id,
+        sessions.expires_at,
+        sessions.last_used_at,
         users.email,
         users.full_name,
         users.avatar_url,
@@ -399,12 +652,15 @@ async function getSessionContext(event) {
      left join catalog_stores stores on stores.owner_user_id = users.id
      where sessions.token_hash = $1
        and sessions.expires_at > now()
-     limit 1`,
+      limit 1`,
     [tokenHash],
   );
 
   const session = result.rows[0];
-  if (!session) return null;
+  if (!session) {
+    deleteCachedSessionContextByTokenHash(tokenHash);
+    return null;
+  }
 
   if (session.user_deleted_at || session.store_deleted_at) {
     await pool.query(
@@ -412,6 +668,7 @@ async function getSessionContext(event) {
        where id = $1`,
       [session.session_id],
     );
+    deleteCachedSessionContextByTokenHash(tokenHash);
     return null;
   }
 
@@ -422,32 +679,26 @@ async function getSessionContext(event) {
        where id = $1`,
       [session.session_id],
     );
+    deleteCachedSessionContextByTokenHash(tokenHash);
     return null;
   }
 
-  await pool.query(
-    `update catalog_sessions
-     set last_used_at = now()
-     where id = $1`,
-    [session.session_id],
+  const hydratedSession = await ensureSessionStoreContext(pool, session);
+  const touched = await touchSessionIfNeeded(
+    pool,
+    session.session_id,
+    session.last_used_at,
   );
-
-  return {
-    sessionId: session.session_id,
-    userId: session.user_id,
-    email: session.email,
-    fullName: session.full_name || "",
-    avatarUrl: session.avatar_url || "",
-    role: getEffectiveUserRole(session),
-    superAdminAccess: getResolvedSuperAdminAccess(session),
-    accountStatus,
-    storeId: session.store_id || "",
-    storeName: session.store_name || "",
-    planStatus: session.plan_status,
-    planExpiresAt: session.plan_expires_at,
-    referenceId: session.reference_id || "",
+  const sessionContext = buildSessionContext(
+    {
+      ...hydratedSession,
+      account_status: accountStatus,
+      last_used_at: touched ? new Date().toISOString() : hydratedSession.last_used_at,
+    },
     tokenHash,
-  };
+  );
+  writeCachedSessionContext(tokenHash, sessionContext);
+  return sessionContext;
 }
 
 async function deleteSessionByEvent(event) {
@@ -456,11 +707,13 @@ async function deleteSessionByEvent(event) {
 
   await ensureDatabaseReady();
   const pool = getPool();
+  const tokenHash = hashSessionToken(token);
   await pool.query(
     `delete from catalog_sessions
      where token_hash = $1`,
-    [hashSessionToken(token)],
+    [tokenHash],
   );
+  deleteCachedSessionContextByTokenHash(tokenHash);
 }
 
 async function deleteSessionsByUser(queryable, userId) {
@@ -470,6 +723,7 @@ async function deleteSessionsByUser(queryable, userId) {
      where user_id = $1`,
     [userId],
   );
+  deleteCachedSessionContextsByUserId(userId);
 }
 
 function sanitizeUser(row) {
@@ -521,6 +775,7 @@ export {
   createSession,
   deleteSessionByEvent,
   deleteSessionsByUser,
+  ensureSessionStoreContext,
   ensureStoreForUser,
   canManageSuperAdminUsers,
   DEFAULT_SUPER_ADMIN_ACCESS,
@@ -539,5 +794,7 @@ export {
   normalizeUserRole,
   requireSuperAdminAccess,
   sessionPayload,
+  shouldTouchSession,
+  touchSessionIfNeeded,
   verifyPassword,
 };

@@ -1,4 +1,4 @@
-import { createSession, getEffectiveUserRole, normalizeAccountStatus, sessionPayload, verifyPassword } from "./_auth.js";
+import { createSession, ensureSessionStoreContext, getEffectiveUserRole, normalizeAccountStatus, sessionPayload, verifyPassword } from "./_auth.js";
 import { ensureDatabaseReady, getPool, hasColumn, jsonResponse, withCors } from "./_postgres.js";
 import {
   clearRateLimit,
@@ -42,6 +42,7 @@ async function handle(event) {
       const userResult = await connection.query(
         `select
            users.id,
+           users.id as user_id,
            users.email,
            users.full_name,
            users.avatar_url,
@@ -52,7 +53,10 @@ async function handle(event) {
            users.deleted_at,
            stores.id as store_id,
            stores.name as store_name,
-           stores.deleted_at as store_deleted_at
+           stores.deleted_at as store_deleted_at,
+           stores.plan_status,
+           stores.plan_expires_at,
+           stores.reference_id
           from catalog_users users
           left join catalog_stores stores on stores.owner_user_id = users.id
           where users.email = $1
@@ -88,9 +92,10 @@ async function handle(event) {
         return jsonResponse(403, { error: "Esta empresa esta no lixo. Recupera-a no super admin para voltar a entrar." });
       }
 
-      if (role !== "super_admin" && !user.store_id) {
-        return jsonResponse(403, { error: "Nao existe loja associada a esta conta. Ativa ou cria a loja no super admin antes de iniciar sessao." });
-      }
+      const hydratedUser =
+        role === "super_admin"
+          ? user
+          : await ensureSessionStoreContext(connection, user);
 
       await connection.query("begin");
       transactionStarted = true;
@@ -112,8 +117,11 @@ async function handle(event) {
             role,
             superAdminAccess: user.super_admin_access,
             accountStatus,
-            storeId: user.store_id || "",
-            storeName: user.store_name || "",
+            storeId: hydratedUser.store_id || "",
+            storeName: hydratedUser.store_name || "",
+            planStatus: hydratedUser.plan_status || null,
+            planExpiresAt: hydratedUser.plan_expires_at || null,
+            referenceId: hydratedUser.reference_id || "",
           }),
         },
         {

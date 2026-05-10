@@ -54,28 +54,29 @@ function getCatalogApiStatus() {
   }
 
   const apiDetails = apiBaseUrl === "/api"
-    ? "Frontend pronto para usar a API remota em /api com redirect serverless da Netlify para /.netlify/functions."
+    ? "A ligacao online da loja esta pronta em /api."
     : apiBaseUrl.startsWith("/.netlify/functions")
-      ? `Frontend pronto para usar a API remota em ${apiBaseUrl}. Este caminho legado continua valido, mas em Netlify o recomendado agora e usar VITE_CATALOG_API_BASE=/api.`
-      : `Frontend pronto para usar a API remota em ${apiBaseUrl}.`;
+      ? `A ligacao online da loja esta pronta em ${apiBaseUrl}.`
+      : `A ligacao online da loja esta pronta em ${apiBaseUrl}.`;
 
   return createStatus(
     "catalog_api",
-    "API remota do catalogo",
+    "Ligacao online da loja",
     Boolean(apiBaseUrl),
     apiBaseUrl
       ? apiDetails
       : allowLocalFallback
-        ? "O fallback local do frontend esta ativo. Isso so deve ser usado em desenvolvimento local, nunca como plano de producao."
-        : "Sem VITE_CATALOG_API_BASE, a app bloqueia o arranque fora de localhost para evitar gravacao em localStorage em producao.",
+        ? "O modo local de seguranca esta ativo. Usa isto apenas em desenvolvimento."
+        : "Sem VITE_CATALOG_API_BASE, a app bloqueia o arranque fora de localhost para evitar gravacao local em producao.",
     missing,
     {
-      nextStep: "Define VITE_CATALOG_API_BASE com o endpoint real da API antes do deploy.",
+      nextStep: "Define VITE_CATALOG_API_BASE com a ligacao real da loja antes do deploy.",
     },
   );
 }
 
 function getPasswordResetEmailStatus() {
+  const configuredSender = cleanText(process.env.PASSWORD_RESET_FROM_EMAIL);
   const missing = [];
   if (!cleanText(process.env.APP_BASE_URL || process.env.PUBLIC_APP_URL || process.env.SITE_URL || process.env.URL)) {
     missing.push("APP_BASE_URL");
@@ -89,15 +90,15 @@ function getPasswordResetEmailStatus() {
 
   return createStatus(
     "password_reset_email",
-    "Reset de senha por email",
+    "Emails transacionais",
     missing.length === 0,
     missing.length === 0
-      ? "Email transacional pronto para links reais de recuperacao."
-      : "Faltam variaveis para envio real de recuperacao por email.",
+      ? `Email transacional pronto para links reais de recuperacao e aprovacao da loja. Obrigatorias: APP_BASE_URL, RESEND_API_KEY e PASSWORD_RESET_FROM_EMAIL. Opcionais: PASSWORD_RESET_FROM_NAME e PASSWORD_RESET_REPLY_TO. Sender atual: ${configuredSender}.`
+      : "Faltam variaveis obrigatorias para envio real de recuperacao e aprovacao da loja por email. PASSWORD_RESET_FROM_NAME e PASSWORD_RESET_REPLY_TO sao opcionais, mas PASSWORD_RESET_FROM_EMAIL precisa ser um remetente verificado no Resend.",
     missing,
     {
       required: false,
-      nextStep: "Configura APP_BASE_URL, RESEND_API_KEY e PASSWORD_RESET_FROM_EMAIL para recuperacao real por email.",
+      nextStep: "Define APP_BASE_URL, RESEND_API_KEY e PASSWORD_RESET_FROM_EMAIL com um sender verificado no Resend. PASSWORD_RESET_FROM_NAME e PASSWORD_RESET_REPLY_TO podem ser adicionados depois como opcionais.",
     },
   );
 }
@@ -113,11 +114,11 @@ function getWhatsAppCloudStatus() {
 
   return createStatus(
     "whatsapp_cloud",
-    "WhatsApp Cloud API",
+    "Envio automatico no WhatsApp",
     missing.length === 0,
     missing.length === 0
       ? "Notificacao oficial pronta para envio automatico ao lojista."
-      : "O pedido continua a abrir o WhatsApp manualmente enquanto a Cloud API nao estiver configurada.",
+      : "O pedido continua a abrir o WhatsApp manualmente enquanto o envio automatico nao estiver configurado.",
     missing,
     {
       required: false,
@@ -138,18 +139,18 @@ function getNotificationDispatchStatus() {
 
   return createStatus(
     "notification_dispatch",
-    "Dispatcher da fila de notificacoes",
+    "Fila automatica de notificacoes",
     !hasWhatsAppCloud || missing.length === 0,
     !hasWhatsAppCloud
-      ? "Opcional enquanto a WhatsApp Cloud API nao estiver ativa."
+      ? "Opcional enquanto o envio automatico no WhatsApp nao estiver ativo."
       : missing.length === 0
-        ? "Pronto para processar a fila assincrona de notificacoes."
-        : "A fila assincrona existe, mas ainda falta proteger o endpoint de dispatch com segredo.",
+        ? "Pronto para processar a fila automatica de notificacoes."
+        : "A fila automatica existe, mas ainda falta proteger este fluxo com segredo.",
     hasWhatsAppCloud ? missing : [],
     {
       required: false,
       nextStep:
-        "Configura NOTIFICATION_DISPATCH_SECRET e agenda execucoes regulares de notifications-dispatch, por cron ou scheduler da tua infra.",
+        "Configura NOTIFICATION_DISPATCH_SECRET e agenda execucoes regulares do envio automatico.",
     },
   );
 }
@@ -165,15 +166,15 @@ function getMediaStorageStatus() {
 
   return createStatus(
     "media_storage",
-    "Storage/CDN de imagens",
+    "Imagens da loja",
     missing.length === 0,
     missing.length === 0
-      ? `Uploads locais podem ser convertidos em URLs publicas no bucket ${cleanText(process.env.SUPABASE_STORAGE_BUCKET) || "catalog-assets"}.`
-      : "Sem storage configurado, as imagens devem entrar por URL publica e os uploads de ficheiro ficam bloqueados.",
+      ? `As imagens locais podem ser convertidas em links publicos no espaco ${cleanText(process.env.SUPABASE_STORAGE_BUCKET) || "catalog-assets"}.`
+      : "Sem o servico de imagens configurado, as imagens devem entrar por link publico e os uploads de ficheiro ficam bloqueados.",
     missing,
     {
       required: false,
-      nextStep: "Configura SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY para habilitar uploads de ficheiro e CDN publica.",
+      nextStep: "Configura SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY para habilitar uploads de ficheiro e links publicos.",
     },
   );
 }
@@ -183,9 +184,9 @@ function getNativeAppSessionStatus() {
   if (!nativeApiBaseUrl) {
     return createStatus(
       "native_app_session",
-      "Sessao do app nativo",
+      "App movel",
       true,
-      "Nao configurado neste ambiente. Se o deploy for web-only, nao existe nenhum requisito extra de sessao nativa.",
+      "Nao configurado neste ambiente. Se o deploy for so web, nao existe nenhum requisito extra aqui.",
       [],
       {
         required: false,
@@ -235,16 +236,16 @@ function getNativeAppSessionStatus() {
 
   return createStatus(
     "native_app_session",
-    "Sessao do app nativo",
+    "App movel",
     missing.length === 0,
     missing.length === 0
-      ? "Sessao cross-origin pronta para Capacitor, com cookie seguro e origens locais autorizadas."
-      : "Existe target nativo configurado, mas faltam alinhamentos de cookie/CORS/URL absoluta para sessao confiavel no app.",
+      ? "A entrada no app movel esta pronta, com ligacao segura e origens autorizadas."
+      : "O app movel esta configurado, mas ainda faltam alguns ajustes para uma entrada segura.",
     missing,
     {
       required: false,
       nextStep:
-        "Mantem VITE_NATIVE_CATALOG_API_BASE em HTTPS absoluto e alinha APP_BASE_URL, CORS_ALLOWED_ORIGINS, SESSION_COOKIE_SAME_SITE=None e SESSION_COOKIE_SECURE=true antes da release nativa.",
+        "Mantem VITE_NATIVE_CATALOG_API_BASE em HTTPS absoluto e alinha APP_BASE_URL, CORS_ALLOWED_ORIGINS, SESSION_COOKIE_SAME_SITE=None e SESSION_COOKIE_SECURE=true antes da release do app.",
     },
   );
 }
@@ -265,18 +266,18 @@ function getDatabaseStatus() {
     "Base de dados",
     ready,
     poolerUrl
-      ? "Ligacao PostgreSQL configurada via pooler."
+      ? "Ligacao da base de dados configurada com reforco de desempenho."
       : hasConnectionString
-        ? "Ligacao PostgreSQL configurada via connection string."
+        ? "Ligacao da base de dados configurada por endereco unico."
         : hasSplitConfig
-          ? "Ligacao PostgreSQL configurada via variaveis separadas."
-          : "Falta a configuracao de ligacao ao PostgreSQL.",
+          ? "Ligacao da base de dados configurada por dados separados."
+          : "Falta a configuracao de ligacao da base de dados.",
     ready
       ? []
       : ["POSTGRES_POOLER_URL ou DATABASE_URL ou POSTGRES_HOST/POSTGRES_DATABASE/POSTGRES_USER/POSTGRES_PASSWORD"],
     {
       nextStep:
-        "Define a ligacao PostgreSQL real usada pelas funcoes serverless. Em staging/producao serverless, prefere POSTGRES_POOLER_URL com POSTGRES_USE_POOLER=true.",
+        "Define a ligacao real da base de dados usada pelas funcoes do sistema. Em staging/producao, prefere POSTGRES_POOLER_URL com POSTGRES_USE_POOLER=true.",
     },
   );
 }

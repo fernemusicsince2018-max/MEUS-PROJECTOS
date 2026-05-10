@@ -123,11 +123,12 @@ async function ensurePublicAssetReachable(url) {
 async function verifyPasswordResetEmail({ toEmail }) {
   const { isEmailDeliveryConfigured, sendPasswordResetEmail } = await import("../netlify/functions/_email.js");
   const resendConfigured = isEmailDeliveryConfigured();
+  const configuredSender = cleanText(process.env.PASSWORD_RESET_FROM_EMAIL);
 
   if (!resendConfigured) {
     return createResult("email", "Reset de senha por email", {
       ok: false,
-      details: "Faltam RESEND_API_KEY e/ou PASSWORD_RESET_FROM_EMAIL para envio real pelo Resend.",
+      details: "Faltam RESEND_API_KEY e/ou PASSWORD_RESET_FROM_EMAIL. Para producao, APP_BASE_URL tambem precisa estar definido e PASSWORD_RESET_FROM_EMAIL deve ser um remetente verificado no Resend.",
     });
   }
 
@@ -135,7 +136,7 @@ async function verifyPasswordResetEmail({ toEmail }) {
     return createResult("email", "Reset de senha por email", {
       ok: true,
       skipped: true,
-      details: "Configurado. Nenhum --email-to foi fornecido, por isso o envio real nao foi disparado.",
+      details: `Configurado para envio real via Resend com sender ${configuredSender}. Obrigatorios: RESEND_API_KEY e PASSWORD_RESET_FROM_EMAIL verificado. Opcionais: PASSWORD_RESET_FROM_NAME e PASSWORD_RESET_REPLY_TO. Nenhum --email-to foi fornecido, por isso o envio real nao foi disparado.`,
     });
   }
 
@@ -148,7 +149,7 @@ async function verifyPasswordResetEmail({ toEmail }) {
 
   return createResult("email", "Reset de senha por email", {
     ok: true,
-    details: `Email real de teste enviado para ${cleanText(toEmail)}.`,
+    details: `Email real de teste enviado para ${cleanText(toEmail)} com sender ${configuredSender}.`,
   });
 }
 

@@ -6,7 +6,9 @@ import { lockCatalogIdentities } from "./_identity-locks.js";
 import { sortPublicCatalogProducts, upsertPublicCatalogSnapshot } from "./_public-catalog-snapshots.js";
 import { ensureDatabaseReady, getPool, jsonResponse, mapProduct, withCors } from "./_postgres.js";
 import { getSystemSettings } from "./_settings.js";
+import { buildCatalogStorePaymentUpsertFragments, getCatalogStorePaymentColumnAvailability } from "./_store-payment-columns.js";
 import { materializePublicImageAsset } from "./_storage.js";
+import { attachPublicStoreReviews } from "./_store-reviews.js";
 import { normalizeProductImageCollection, normalizeStoreLogo } from "./_security.js";
 import { getStoreFieldMeta, normalizeIdentityForLookup, validateBusinessEmail, validatePhoneForCountry, validateTaxIdForCountry, validateWhatsAppForCountry } from "./_store-validation.js";
 import { normalizeHostname, normalizeStorefrontSlug, validateCustomDomain, validateStorefrontSlug } from "../../shared/storefront.js";
@@ -97,6 +99,11 @@ function normalizeStoreInput(store = {}) {
     addressLine: cleanText(store.addressLine, 255),
     city: cleanText(store.city, 120),
     country,
+    paymentMethod: cleanText(store.paymentMethod, 80),
+    paymentBankName: cleanText(store.paymentBankName, 160),
+    paymentAccountName: cleanText(store.paymentAccountName, 160),
+    paymentAccountNumber: cleanText(store.paymentAccountNumber, 80),
+    paymentIban: cleanText(store.paymentIban, 80),
     publicSlug: normalizeStorefrontSlug(store.publicSlug),
     customDomain: normalizeHostname(store.customDomain),
     publicEnabled: Boolean(store.publicEnabled),
@@ -296,12 +303,17 @@ async function handle(event) {
     const normalizedProducts = normalizedProductsResult.value;
     const persistedStore = await persistStoreAssets(normalizedStore, catalogId);
     const persistedProducts = await persistProductAssets(normalizedProducts, catalogId);
+    const normalizedTaxIdLookup = persistedStore.taxId
+      ? normalizeIdentityForLookup(persistedStore.taxId)
+      : "";
+    const phoneIdentityValues = [...new Set([persistedStore.businessPhone, persistedStore.whatsapp].filter(Boolean))];
 
     const pool = getPool();
     const connection = await pool.connect();
 
     try {
       await connection.query("begin");
+      const paymentColumns = await getCatalogStorePaymentColumnAvailability(connection);
       const systemSettings = await getSystemSettings(connection);
       const planAccess =
         session.role === "super_admin"
@@ -334,13 +346,21 @@ async function handle(event) {
         });
       }
 
+      const identityLocks = [];
       if (persistedStore.businessEmail) {
-        const lockEntries = [{ scope: "email", value: persistedStore.businessEmail }];
-        if (persistedStore.taxId) {
-          lockEntries.push({ scope: "tax-id", value: normalizeIdentityForLookup(persistedStore.taxId) });
-        }
-        await lockCatalogIdentities(connection, lockEntries);
+        identityLocks.push({ scope: "email", value: persistedStore.businessEmail });
+      }
+      if (normalizedTaxIdLookup) {
+        identityLocks.push({ scope: "tax-id", value: normalizedTaxIdLookup });
+      }
+      for (const phoneValue of phoneIdentityValues) {
+        identityLocks.push({ scope: "phone", value: phoneValue });
+      }
+      if (identityLocks.length) {
+        await lockCatalogIdentities(connection, identityLocks);
+      }
 
+      if (persistedStore.businessEmail) {
         const emailConflictUser = await connection.query(
           `select id
            from catalog_users
@@ -376,11 +396,45 @@ async function handle(event) {
         }
       }
 
-      if (persistedStore.taxId) {
-        const normalizedTaxId = normalizeIdentityForLookup(persistedStore.taxId);
-        if (!persistedStore.businessEmail) {
-          await lockCatalogIdentities(connection, [{ scope: "tax-id", value: normalizedTaxId }]);
+      if (persistedStore.businessPhone) {
+        const businessPhoneConflictStore = await connection.query(
+          `select id
+           from catalog_stores
+           where deleted_at is null
+             and id <> $1
+             and (business_phone = $2 or whatsapp = $2)
+           limit 1`,
+          [catalogId, persistedStore.businessPhone],
+        );
+
+        if (businessPhoneConflictStore.rows.length) {
+          await connection.query("rollback");
+          return jsonResponse(409, {
+            error: "Este numero de telemovel ja esta a ser usado noutra empresa.",
+          });
         }
+      }
+
+      if (persistedStore.whatsapp && persistedStore.whatsapp !== persistedStore.businessPhone) {
+        const whatsappConflictStore = await connection.query(
+          `select id
+           from catalog_stores
+           where deleted_at is null
+             and id <> $1
+             and (business_phone = $2 or whatsapp = $2)
+           limit 1`,
+          [catalogId, persistedStore.whatsapp],
+        );
+
+        if (whatsappConflictStore.rows.length) {
+          await connection.query("rollback");
+          return jsonResponse(409, {
+            error: "Este numero de WhatsApp ja esta a ser usado noutra empresa.",
+          });
+        }
+      }
+
+      if (persistedStore.taxId) {
         const taxIdConflictStore = await connection.query(
           `select id
            from catalog_stores
@@ -388,7 +442,7 @@ async function handle(event) {
              and id <> $1
              and lower(regexp_replace(coalesce(tax_id, ''), '[^a-zA-Z0-9]+', '', 'g')) = $2
            limit 1`,
-          [catalogId, normalizedTaxId],
+          [catalogId, normalizedTaxIdLookup],
         );
 
         if (taxIdConflictStore.rows.length) {
@@ -437,11 +491,56 @@ async function handle(event) {
         }
       }
 
+      const baseStoreValues = [
+        catalogId,
+        session.userId,
+        persistedStore.name,
+        persistedStore.description,
+        persistedStore.whatsapp,
+        persistedStore.logo,
+        persistedStore.color,
+        persistedStore.currencyCode,
+        persistedStore.pickupNote,
+        persistedStore.publicEnabled,
+        persistedStore.whatsappOrderFormat,
+        persistedStore.legalName,
+        persistedStore.taxId,
+        persistedStore.businessEmail,
+        persistedStore.businessPhone,
+        persistedStore.addressLine,
+        persistedStore.city,
+        persistedStore.country,
+      ];
+      const paymentUpsert = buildCatalogStorePaymentUpsertFragments(
+        persistedStore,
+        paymentColumns,
+        baseStoreValues.length + 1,
+      );
+      const finalStoreValues = [
+        ...baseStoreValues,
+        ...paymentUpsert.values,
+        persistedStore.publicSlug,
+        persistedStore.customDomain,
+      ];
+      const publicSlugPlaceholder = `$${paymentUpsert.nextIndex}`;
+      const customDomainPlaceholder = `$${paymentUpsert.nextIndex + 1}`;
+      const paymentInsertColumnsSql = paymentUpsert.insertColumns.length
+        ? `\n          ${paymentUpsert.insertColumns.join(", ")},`
+        : "";
+      const paymentValuesSegment = paymentUpsert.valuePlaceholders.length
+        ? `, ${paymentUpsert.valuePlaceholders.join(", ")}`
+        : "";
+      const paymentUpdateAssignmentsSql = paymentUpsert.updateAssignments.length
+        ? `,\n          ${paymentUpsert.updateAssignments.join(",\n          ")}`
+        : "";
+
       await connection.query(
         `insert into catalog_stores (
           id, owner_user_id, name, description, whatsapp, logo, color, currency_code, pickup_note, public_enabled,
-          whatsapp_order_format, legal_name, tax_id, business_email, business_phone, address_line, city, country, public_slug, custom_domain
-        ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+          whatsapp_order_format, legal_name, tax_id, business_email, business_phone, address_line, city, country,
+${paymentInsertColumnsSql}
+          public_slug, custom_domain
+        ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18${paymentValuesSegment}, ${publicSlugPlaceholder}, ${customDomainPlaceholder})
         on conflict (id) do update set
           owner_user_id = excluded.owner_user_id,
           name = excluded.name,
@@ -460,30 +559,10 @@ async function handle(event) {
           address_line = excluded.address_line,
           city = excluded.city,
           country = excluded.country,
+${paymentUpdateAssignmentsSql}
           public_slug = excluded.public_slug,
           custom_domain = excluded.custom_domain`,
-        [
-          catalogId,
-          session.userId,
-          persistedStore.name,
-          persistedStore.description,
-          persistedStore.whatsapp,
-          persistedStore.logo,
-          persistedStore.color,
-          persistedStore.currencyCode,
-          persistedStore.pickupNote,
-          persistedStore.publicEnabled,
-          persistedStore.whatsappOrderFormat,
-          persistedStore.legalName,
-          persistedStore.taxId,
-          persistedStore.businessEmail,
-          persistedStore.businessPhone,
-          persistedStore.addressLine,
-          persistedStore.city,
-          persistedStore.country,
-          persistedStore.publicSlug,
-          persistedStore.customDomain,
-        ],
+        finalStoreValues,
       );
 
       const productRows = persistedProducts.map((product) => ({
@@ -601,9 +680,11 @@ async function handle(event) {
         await connection.query(`delete from catalog_products where catalog_id = $1`, [catalogId]);
       }
 
+      const enrichedStore = await attachPublicStoreReviews(connection, persistedStore, catalogId);
+
       await upsertPublicCatalogSnapshot(connection, {
         storeId: catalogId,
-        store: persistedStore,
+        store: enrichedStore,
         products: persistedProductsWithIds,
       });
 
@@ -615,7 +696,7 @@ async function handle(event) {
         ok: true,
         id: catalogId,
         store: {
-          ...persistedStore,
+          ...enrichedStore,
           supportWhatsApp: systemSettings.supportWhatsApp,
           trialDays: systemSettings.trialDays,
           maxFreeProducts: systemSettings.maxFreeProducts,

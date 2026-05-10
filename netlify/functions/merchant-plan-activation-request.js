@@ -8,56 +8,17 @@ import {
   normalizeRequestedDuration,
 } from "./_plan-notifications.js";
 import {
+  PLAN_REQUEST_RETURNING_SQL,
+  PLAN_REQUEST_SELECT_SQL,
   assertPlanPaymentFlowSchema,
   buildPaymentSnapshot,
   mapPlanRequestsWithProofs,
+  resolvePlanActivationRequestAction,
   toPlanActivationRequestPayload,
 } from "./_plan-requests.js";
 import { getSystemSettings } from "./_settings.js";
 
 const OPEN_PLAN_REQUEST_STATUSES = ["pending_payment", "proof_submitted", "under_review", "needs_correction"];
-
-const PLAN_REQUEST_SELECT_SQL = `
-  requests.id,
-  requests.store_id,
-  requests.user_id,
-  requests.plan_id,
-  requests.plan_code,
-  requests.plan_name,
-  requests.store_name,
-  requests.merchant_email,
-  requests.reference_id,
-  requests.store_whatsapp,
-  requests.product_count,
-  requests.current_plan_status,
-  requests.current_plan_name,
-  requests.duration_days,
-  requests.total_price,
-  requests.currency_code,
-  requests.message_text,
-  requests.whatsapp_link,
-  requests.payment_reference,
-  requests.payment_method,
-  requests.payment_instructions,
-  requests.payment_bank_name,
-  requests.payment_account_name,
-  requests.payment_account_number,
-  requests.payment_iban,
-  requests.payment_proof_status,
-  requests.merchant_note,
-  requests.review_note,
-  requests.paid_amount,
-  requests.paid_currency_code,
-  requests.paid_at,
-  requests.payment_due_at,
-  requests.last_proof_submitted_at,
-  requests.status,
-  requests.requested_at,
-  requests.resolved_at,
-  requests.resolved_by_user_id,
-  requests.activated_at,
-  requests.activated_by_user_id
-`;
 
 async function findLatestOpenRequest(connection, storeId) {
   const result = await connection.query(
@@ -72,6 +33,17 @@ async function findLatestOpenRequest(connection, storeId) {
   );
 
   return result.rows[0] || null;
+}
+
+async function expireOpenRequest(connection, requestId) {
+  await connection.query(
+    `update public.catalog_plan_activation_requests
+        set status = 'expired',
+            resolved_at = now(),
+            resolved_by_user_id = null
+      where id = $1`,
+    [requestId],
+  );
 }
 
 async function handle(event) {
@@ -150,20 +122,22 @@ async function handle(event) {
       const durationDays = normalizeRequestedDuration(plan, payload.durationDays);
       const totalPrice = calculatePlanTotalPrice(plan.price_monthly, durationDays);
       const existingOpenRequest = await findLatestOpenRequest(connection, store.id);
+      const existingRequestAction = resolvePlanActivationRequestAction(existingOpenRequest, {
+        planId: plan.id,
+        durationDays,
+        totalPrice,
+      });
 
-      if (existingOpenRequest) {
-        const sameSelection =
-          String(existingOpenRequest.plan_id || "").trim() === plan.id
-          && Number(existingOpenRequest.duration_days || 0) === durationDays
-          && Number(existingOpenRequest.total_price || 0) === totalPrice;
+      if (existingOpenRequest && (existingRequestAction.action === "reuse" || existingRequestAction.action === "blocked")) {
         const existingRequestWithProofs = (await mapPlanRequestsWithProofs(connection, [existingOpenRequest]))[0]
           || toPlanActivationRequestPayload(existingOpenRequest);
 
         return jsonResponse(200, {
           ok: true,
           duplicate: true,
-          blockedPlanSelection: !sameSelection,
-          locked: ["proof_submitted", "under_review"].includes(String(existingOpenRequest.status || "").trim().toLowerCase()),
+          replacedExisting: false,
+          blockedPlanSelection: existingRequestAction.action === "blocked",
+          locked: existingRequestAction.locked,
           request: existingRequestWithProofs,
         });
       }
@@ -187,78 +161,98 @@ async function handle(event) {
       const messageText = buildPlanActivationRequestMessage(requestInput);
       const whatsappLink = buildPlanActivationWhatsAppLink(requestInput);
 
-      const insertResult = await connection.query(
-        `insert into public.catalog_plan_activation_requests (
-           id,
-           store_id,
-           user_id,
-           plan_id,
-           plan_code,
-           plan_name,
-           store_name,
-           merchant_email,
-           reference_id,
-           store_whatsapp,
-           product_count,
-           current_plan_status,
-           current_plan_name,
-           duration_days,
-           total_price,
-           currency_code,
-           message_text,
-           whatsapp_link,
-           payment_reference,
-           payment_method,
-           payment_instructions,
-           payment_bank_name,
-           payment_account_name,
-           payment_account_number,
-           payment_iban,
-           payment_proof_status,
-           status,
-           payment_due_at
-         ) values (
-           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, 'not_submitted', 'pending_payment', $26
-         )
-         returning
-           ${PLAN_REQUEST_SELECT_SQL}`,
-        [
-          randomUUID(),
-          store.id,
-          session.userId,
-          plan.id,
-          plan.code || "",
-          plan.name || "",
-          store.name || session.storeName || session.email || "",
-          session.email || "",
-          referenceId,
-          store.whatsapp || "",
-          Number(store.product_count || 0),
-          store.plan_status || "trial",
-          store.current_plan_name || "",
-          durationDays,
-          totalPrice,
-          plan.currency_code || "AOA",
-          messageText,
-          whatsappLink,
-          paymentSnapshot.paymentReference,
-          paymentSnapshot.paymentMethod,
-          paymentSnapshot.paymentInstructions,
-          paymentSnapshot.paymentBankName,
-          paymentSnapshot.paymentAccountName,
-          paymentSnapshot.paymentAccountNumber,
-          paymentSnapshot.paymentIban,
-          paymentSnapshot.paymentDueAt,
-        ],
-      );
+      let transactionStarted = false;
 
-      return jsonResponse(200, {
-        ok: true,
-        duplicate: false,
-        blockedPlanSelection: false,
-        locked: false,
-        request: toPlanActivationRequestPayload(insertResult.rows[0]),
-      });
+      try {
+        await connection.query("begin");
+        transactionStarted = true;
+
+        if (existingOpenRequest && existingRequestAction.action === "replace") {
+          await expireOpenRequest(connection, existingOpenRequest.id);
+        }
+
+        const insertResult = await connection.query(
+          `insert into public.catalog_plan_activation_requests (
+             id,
+             store_id,
+             user_id,
+             plan_id,
+             plan_code,
+             plan_name,
+             store_name,
+             merchant_email,
+             reference_id,
+             store_whatsapp,
+             product_count,
+             current_plan_status,
+             current_plan_name,
+             duration_days,
+             total_price,
+             currency_code,
+             message_text,
+             whatsapp_link,
+             payment_reference,
+             payment_method,
+             payment_instructions,
+             payment_bank_name,
+             payment_account_name,
+             payment_account_number,
+             payment_iban,
+             payment_proof_status,
+             status,
+             payment_due_at
+           ) values (
+             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, 'not_submitted', 'pending_payment', $26
+            )
+            returning
+              ${PLAN_REQUEST_RETURNING_SQL}`,
+           [
+            randomUUID(),
+            store.id,
+            session.userId,
+            plan.id,
+            plan.code || "",
+            plan.name || "",
+            store.name || session.storeName || session.email || "",
+            session.email || "",
+            referenceId,
+            store.whatsapp || "",
+            Number(store.product_count || 0),
+            store.plan_status || "trial",
+            store.current_plan_name || "",
+            durationDays,
+            totalPrice,
+            plan.currency_code || "AOA",
+            messageText,
+            whatsappLink,
+            paymentSnapshot.paymentReference,
+            paymentSnapshot.paymentMethod,
+            paymentSnapshot.paymentInstructions,
+            paymentSnapshot.paymentBankName,
+            paymentSnapshot.paymentAccountName,
+            paymentSnapshot.paymentAccountNumber,
+            paymentSnapshot.paymentIban,
+            paymentSnapshot.paymentDueAt,
+          ],
+        );
+
+        await connection.query("commit");
+        transactionStarted = false;
+
+        return jsonResponse(200, {
+          ok: true,
+          duplicate: false,
+          replacedExisting: existingOpenRequest && existingRequestAction.action === "replace",
+          blockedPlanSelection: false,
+          locked: false,
+          request: toPlanActivationRequestPayload(insertResult.rows[0]),
+        });
+      } catch (error) {
+        if (transactionStarted) {
+          await connection.query("rollback").catch(() => {});
+        }
+        throw error;
+      }
     } finally {
       connection.release();
     }

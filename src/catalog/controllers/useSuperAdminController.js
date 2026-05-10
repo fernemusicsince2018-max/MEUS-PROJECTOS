@@ -150,6 +150,13 @@ export function useSuperAdminController({
           ? mergeEntriesByUserId(current.clients, response?.clients || [])
           : (response?.clients || []),
         clientPageInfo: response?.clientPageInfo || EMPTY_SUPER_ADMIN_PAGE_INFO,
+        pendingAccessRequests: response?.pendingAccessRequests || [],
+        summary: {
+          ...(current?.summary || EMPTY_SUPER_ADMIN_DATA.summary),
+          pendingAccessRequests: Number(
+            response?.pendingAccessRequestCount ?? current?.summary?.pendingAccessRequests ?? 0,
+          ),
+        },
       }));
       setScreen("superadmin");
       return response;
@@ -188,6 +195,7 @@ export function useSuperAdminController({
       recentClients: response?.recentClients || [],
       urgentClients: response?.urgentClients || [],
       urgentClientsTotal: Number(response?.urgentClientsTotal || 0),
+      pendingAccessRequests: response?.pendingAccessRequests || [],
       adminUsers: response?.adminUsers || [],
       plans: response?.plans || [],
       settings: response?.settings || {},
@@ -370,12 +378,12 @@ export function useSuperAdminController({
     try {
       await authService.saveSuperAdminPlan(payload);
       await loadSuperAdminState();
-      showToast("Plano guardado com sucesso.");
+      showToast("Pacote guardado com sucesso.");
     } catch (error) {
       if (error.status === 401 || error.status === 403) {
         handleUnauthorizedSession();
       }
-      showToast(error.message || "Nao foi possivel guardar o plano.");
+      showToast(error.message || "Nao foi possivel guardar o pacote.");
     } finally {
       setSuperAdminBusy(false);
     }

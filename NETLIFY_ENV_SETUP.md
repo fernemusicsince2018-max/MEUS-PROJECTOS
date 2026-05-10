@@ -43,7 +43,6 @@ Antes das envs, confirma estes dois pontos estruturais:
 
 Importante:
 
-- nao uses `backend/supabase/schema.sql` para provisionar a base actual; esse ficheiro ficou como guardrail e falha de proposito para evitar um schema incompleto
 - o endpoint publico esperado pelo frontend e `/api/...`, embora a compatibilidade legada em `/.netlify/functions/...` continue disponivel
 
 ## 1. PostgreSQL e pooler
@@ -109,7 +108,7 @@ Variaveis:
 
 - `APP_BASE_URL`
   Valor esperado: URL publica final da app
-  Exemplo: `https://catalogofernagest.com`
+  Exemplo: `https://kastrozapp.shop`
   Onde obter: teu dominio publicado no Netlify ou dominio customizado
 
 - `PASSWORD_RESET_FROM_NAME`
@@ -119,12 +118,12 @@ Variaveis:
 
 - `PASSWORD_RESET_FROM_EMAIL`
   Valor esperado: email remetente valido e verificado no Resend
-  Exemplo: `no-reply@catalogofernagest.com`
+  Exemplo: `no-reply@kastrozapp.shop`
   Onde obter: dominio/remetente configurado no Resend
 
 - `PASSWORD_RESET_REPLY_TO`
   Valor esperado: email de resposta
-  Exemplo: `suporte@catalogofernagest.com`
+  Exemplo: `suporte@kastrozapp.shop`
   Onde obter: definido por ti
 
 - `RESEND_API_KEY`
@@ -140,10 +139,10 @@ Variaveis:
 Bloco pronto para Netlify:
 
 ```env
-APP_BASE_URL=https://catalogofernagest.com
+APP_BASE_URL=https://kastrozapp.shop
 PASSWORD_RESET_FROM_NAME=KASTROZAPP
-PASSWORD_RESET_FROM_EMAIL=no-reply@catalogofernagest.com
-PASSWORD_RESET_REPLY_TO=suporte@catalogofernagest.com
+PASSWORD_RESET_FROM_EMAIL=no-reply@kastrozapp.shop
+PASSWORD_RESET_REPLY_TO=suporte@kastrozapp.shop
 RESEND_API_KEY=re_xxxxxxxxxxxxx
 CATALOG_EXPOSE_RESET_CODE=false
 ```
@@ -188,6 +187,12 @@ Variaveis:
   Exemplo: `catalog_order_item_image_v1`
   Onde obter: nome do template aprovado no WhatsApp Manager
 
+- `WHATSAPP_CLOUD_PLAN_ACTIVATION_TEMPLATE_NAME`
+  Valor esperado: nome exato do template de ativacao do plano
+  Exemplo: `catalog_plan_activation_v1`
+  Onde obter: nome do template aprovado no WhatsApp Manager
+  Nota: se este valor ficar vazio, o sistema tenta fallback para mensagem livre
+
 Bloco pronto para Netlify:
 
 ```env
@@ -197,6 +202,7 @@ WHATSAPP_CLOUD_API_VERSION=v23.0
 WHATSAPP_CLOUD_TEMPLATE_LANGUAGE=pt_PT
 WHATSAPP_CLOUD_ORDER_SUMMARY_TEMPLATE_NAME=catalog_order_summary_v1
 WHATSAPP_CLOUD_ORDER_ITEM_TEMPLATE_NAME=catalog_order_item_image_v1
+WHATSAPP_CLOUD_PLAN_ACTIVATION_TEMPLATE_NAME=catalog_plan_activation_v1
 ```
 
 Checklist rapido desta frente:
@@ -205,6 +211,7 @@ Checklist rapido desta frente:
 - token com permissao de envio
 - templates aprovados com nomes exatamente iguais aos definidos acima
 - idioma do template igual a `WHATSAPP_CLOUD_TEMPLATE_LANGUAGE`
+- se fores notificar ativacoes de plano fora da janela de 24 horas, manter tambem `WHATSAPP_CLOUD_PLAN_ACTIVATION_TEMPLATE_NAME`
 
 ### 3.1 Dispatcher da fila de notificacoes
 
@@ -286,10 +293,10 @@ POSTGRES_STATEMENT_TIMEOUT_MS=0
 POSTGRES_KEEPALIVE=true
 POSTGRES_APPLICATION_NAME=kastrozap-staging
 
-APP_BASE_URL=https://catalogofernagest.com
+APP_BASE_URL=https://kastrozapp.shop
 PASSWORD_RESET_FROM_NAME=KASTROZAPP
-PASSWORD_RESET_FROM_EMAIL=no-reply@catalogofernagest.com
-PASSWORD_RESET_REPLY_TO=suporte@catalogofernagest.com
+PASSWORD_RESET_FROM_EMAIL=no-reply@kastrozapp.shop
+PASSWORD_RESET_REPLY_TO=suporte@kastrozapp.shop
 RESEND_API_KEY=re_xxxxxxxxxxxxx
 CATALOG_EXPOSE_RESET_CODE=false
 

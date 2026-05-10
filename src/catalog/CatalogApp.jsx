@@ -38,7 +38,7 @@ function buildOfflineView(kind) {
       hint: "Assim que a vitrine carregar com internet, a copia local fica pronta para uma proxima abertura offline.",
     },
     tracking: {
-      title: "Este tracking ainda nao ficou guardado",
+      title: "Este acompanhamento ainda nao ficou guardado",
       message: "Ainda nao existe uma copia local deste pedido neste dispositivo.",
       hint: "Quando voltares a ter internet, abre de novo o link para deixar o estado pronto para consulta offline.",
     },
@@ -101,6 +101,7 @@ export default function CatalogApp() {
     orderService,
     catalogStorage,
     session,
+    setSession: shellActions.setSession,
     sessionRef,
     screen,
     handleUnauthorizedSession: shellActions.handleUnauthorizedSession,
@@ -156,8 +157,13 @@ export default function CatalogApp() {
     ordersLoading,
     ordersPageInfo,
     ordersLoadingMore,
+    merchantReviews,
+    merchantReviewsLoading,
+    merchantReviewsPageInfo,
+    merchantReviewsLoadingMore,
     busyOrderId,
     busyCustomerKey,
+    busyReviewId,
     merchantPlanCatalog,
     merchantPlanCatalogLoading,
     merchantPlanCatalogError,
@@ -171,6 +177,7 @@ export default function CatalogApp() {
     trackedOrder,
     trackingLoading,
     trackingError,
+    reviewSubmitting,
     search,
     orderMeta,
     blockedCatalog,
@@ -239,7 +246,11 @@ export default function CatalogApp() {
         order={trackedOrder}
         loading={trackingLoading}
         error={trackingError}
+        reviewBusy={reviewSubmitting}
+        onSubmitReview={publicActions.submitTrackedOrderReview}
         onBackToStore={publicActions.handleBackToTrackedStore}
+        toast={toast}
+        toastNode={toastNode}
       />,
     );
   }
@@ -302,10 +313,12 @@ export default function CatalogApp() {
         onUpd={publicActions.updCart}
         onCheckout={publicActions.checkout}
         checkoutBusy={checkoutBusy}
+        storeId={sid}
         orderReceipt={orderReceipt}
         onCloseOrderReceipt={() => publicActions.setOrderReceipt(null)}
         onTrackOrderReceipt={publicActions.handleTrackReceipt}
         onOpenReceiptWhatsApp={publicActions.handleOpenReceiptWhatsApp}
+        onLoadPublicStoreReviews={publicActions.loadPublicStoreReviews}
         toast={toast}
         toastNode={toastNode}
         onBack={publicActions.navigateBackFromCatalog}
@@ -351,8 +364,13 @@ export default function CatalogApp() {
       ordersLoading={ordersLoading}
       ordersPageInfo={ordersPageInfo}
       ordersLoadingMore={ordersLoadingMore}
+      merchantReviews={merchantReviews}
+      merchantReviewsLoading={merchantReviewsLoading}
+      merchantReviewsPageInfo={merchantReviewsPageInfo}
+      merchantReviewsLoadingMore={merchantReviewsLoadingMore}
       busyOrderId={busyOrderId}
       busyCustomerKey={busyCustomerKey}
+      busyReviewId={busyReviewId}
       catUrl={catUrl}
       tab={tab}
       setTab={merchantActions.setTab}
@@ -364,8 +382,11 @@ export default function CatalogApp() {
       onPreview={presentationActions.handleMerchantPreview}
       onOrdersRefresh={merchantActions.handleOrdersRefresh}
       onOrdersLoadMore={merchantActions.handleOrdersLoadMore}
+      onReviewsRefresh={merchantActions.handleMerchantReviewsRefresh}
+      onReviewsLoadMore={merchantActions.handleMerchantReviewsLoadMore}
       onOrderStatusChange={merchantActions.handleOrderStatusChange}
       onCustomerDiscountSave={merchantActions.handleCustomerDiscountSave}
+      onReviewFeatureToggle={merchantActions.handleStoreReviewFeatureToggle}
       planCatalog={merchantPlanCatalog}
       planCatalogLoading={merchantPlanCatalogLoading}
       planCatalogError={merchantPlanCatalogError}

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { loadLocalEnv } from "./loadEnv.mjs";
 import { ensureModernSchema } from "./ensureModernSchema.mjs";
+import { ensureCatalogStorePaymentColumns } from "../netlify/functions/_store-payment-columns.js";
 
 loadLocalEnv();
 
@@ -14,14 +15,15 @@ async function main() {
 
   await pool.query(sql);
   await ensureModernSchema(pool);
+  await ensureCatalogStorePaymentColumns(pool);
 
-  console.log("Base PostgreSQL preparada com sucesso.");
+  console.log("Base de dados preparada com sucesso.");
   console.log(`Schema aplicado: ${schemaPath}`);
 }
 
 main()
   .catch((error) => {
-    console.error("Falha ao criar a estrutura PostgreSQL.");
+    console.error("Falha ao criar a estrutura da base de dados.");
     console.error(error.message || error);
     process.exitCode = 1;
   })

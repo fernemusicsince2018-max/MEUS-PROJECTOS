@@ -1,4 +1,5 @@
 import { getSessionContext } from "./_auth.js";
+import { registerOrderMetricsStatusTransition } from "./_order-metrics.js";
 import { applyOrderStatusUpdate, mapOrder, normalizeOrderStatusUpdateInput } from "./_orders.js";
 import { registerOrderStatusTransition } from "./_order-stats.js";
 import { ensureDatabaseReady, getPool, jsonResponse, withCors } from "./_postgres.js";
@@ -62,6 +63,13 @@ async function handle(event) {
         currentOrder.status,
         nextState.status,
       );
+      await registerOrderMetricsStatusTransition(connection, {
+        storeId: session.storeId,
+        createdAt: currentOrder.createdAt,
+        totalAmount: currentOrder.totalAmount,
+        previousStatus: currentOrder.status,
+        nextStatus: nextState.status,
+      });
       await connection.query("commit");
 
       return jsonResponse(200, {

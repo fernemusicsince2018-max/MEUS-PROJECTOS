@@ -1,6 +1,7 @@
 import React from "react";
 import { Check, Copy, ExternalLink, Phone, QrCode, Share2 } from "lucide-react";
 import { SURFACE_STYLE } from "../../constants.js";
+import { isLocalNetworkHostname } from "../../../../shared/storefront.js";
 
 export default function ShareTab({ catUrl, color, store, catalogLocked = false, planAccessMessage = "", activationUrl = "" }) {
   const [copied, setCopied] = React.useState(false);
@@ -8,11 +9,24 @@ export default function ShareTab({ catUrl, color, store, catalogLocked = false, 
   const isPublicEnabled = Boolean(store?.publicEnabled);
   const shareText = `${store.name || "Catalogo"}: ${catUrl}`;
   const canShareCatalog = catUrl && isPublicEnabled && !catalogLocked;
+  const isLocalOnlyUrl = canShareCatalog && isLocalNetworkHostname(catUrl);
   const qrSrc = canShareCatalog ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(catUrl)}` : "";
   const waHref = canShareCatalog ? `https://wa.me/?text=${encodeURIComponent(`Vem ver este catalogo: ${catUrl}`)}` : "#";
+  const visibleCatalogUrl = canShareCatalog
+    ? catUrl
+    : !catUrl
+      ? "Guarda a loja primeiro."
+      : catalogLocked
+        ? "Loja inativa ate a reativacao do plano."
+        : 'Catalogo publico desligado em "Minha Loja".';
+  const qrPlaceholderLabel = !catUrl
+    ? "Guarda a loja primeiro."
+    : catalogLocked
+      ? "Loja inativa ate reativar o plano."
+      : 'Liga o catalogo publico em "Minha Loja".';
 
   async function copy() {
-    if (!catUrl) return;
+    if (!canShareCatalog) return;
     try {
       await navigator.clipboard.writeText(catUrl);
       setCopied(true);
@@ -21,7 +35,7 @@ export default function ShareTab({ catUrl, color, store, catalogLocked = false, 
   }
 
   async function shareNow() {
-    if (!catUrl) return;
+    if (!canShareCatalog) return;
     if (!canNativeShare) {
       copy();
       return;
@@ -72,7 +86,7 @@ export default function ShareTab({ catUrl, color, store, catalogLocked = false, 
 
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
           <div style={{ flex: "1 1 280px", padding: "11px 12px", background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-md)", fontSize: "11px", color: "var(--color-text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "var(--font-mono)" }}>
-            {catUrl || "(guarda a loja primeiro)"}
+            {visibleCatalogUrl}
           </div>
 
           <button
@@ -106,6 +120,12 @@ export default function ShareTab({ catUrl, color, store, catalogLocked = false, 
             )}
           </button>
         </div>
+
+        {isLocalOnlyUrl ? (
+          <div style={{ marginTop: "10px", padding: "10px 12px", borderRadius: "var(--border-radius-md)", background: "#eff6ff", color: "#1d4ed8", fontSize: "12px", fontWeight: "600" }}>
+            Este link aponta para o teu ambiente local. Ele so abre neste dispositivo ou noutros aparelhos que consigam chegar a este mesmo endereco na tua rede.
+          </div>
+        ) : null}
 
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "12px" }}>
           <button
@@ -161,7 +181,7 @@ export default function ShareTab({ catUrl, color, store, catalogLocked = false, 
           <img src={qrSrc} alt="QR Code" style={{ width: "150px", height: "150px", borderRadius: "8px", margin: "0 auto" }} />
         ) : (
           <div style={{ width: "150px", height: "150px", background: "var(--color-background-secondary)", borderRadius: "8px", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-secondary)", fontSize: "12px", margin: "0 auto" }}>
-            Guarda a loja primeiro
+            {qrPlaceholderLabel}
           </div>
         )}
         <div style={{ fontSize: "12px", color: "var(--color-text-secondary)", marginTop: "12px" }}>

@@ -1,14 +1,59 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 apply plugin: 'com.android.application'
 
+def releaseProperties = new Properties()
+def releasePropertiesFile = rootProject.file('keystore.properties')
+
+if (releasePropertiesFile.exists()) {
+    releaseProperties.load(new FileInputStream(releasePropertiesFile))
+}
+
+def readBuildConfigValue = { String key, String fallback = '' ->
+    def propertyValue = releaseProperties.getProperty(key)
+    if (propertyValue != null && propertyValue.toString().trim()) {
+        return propertyValue.toString().trim()
+    }
+
+    def gradleValue = project.findProperty(key)
+    if (gradleValue != null && gradleValue.toString().trim()) {
+        return gradleValue.toString().trim()
+    }
+
+    def envValue = System.getenv(key)
+    if (envValue != null && envValue.toString().trim()) {
+        return envValue.toString().trim()
+    }
+
+    return fallback
+}
+
+def appVersionCodeValue = readBuildConfigValue('ANDROID_VERSION_CODE', '1')
+def appVersionCode = 1
+
+try {
+    appVersionCode = Integer.parseInt(appVersionCodeValue)
+} catch (ignored) {
+    logger.warn("ANDROID_VERSION_CODE invalido '${appVersionCodeValue}'. A usar 1.")
+}
+
+def appVersionName = readBuildConfigValue('ANDROID_VERSION_NAME', '1.0.0')
+def releaseStoreFile = readBuildConfigValue('KASTROZAPP_UPLOAD_STORE_FILE')
+def releaseStorePassword = readBuildConfigValue('KASTROZAPP_UPLOAD_STORE_PASSWORD')
+def releaseKeyAlias = readBuildConfigValue('KASTROZAPP_UPLOAD_KEY_ALIAS')
+def releaseKeyPassword = readBuildConfigValue('KASTROZAPP_UPLOAD_KEY_PASSWORD')
+def releaseSigningReady = releaseStoreFile && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+
 android {
-    namespace = "com.fernagest.catalogo"
+    namespace = "shop.kastrozapp"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.fernagest.catalogo"
+        applicationId "shop.kastrozapp"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode appVersionCode
+        versionName appVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,9 +61,22 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (releaseSigningReady) {
+                storeFile rootProject.file(releaseStoreFile)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
+            if (releaseSigningReady) {
+                signingConfig signingConfigs.release
+            }
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }

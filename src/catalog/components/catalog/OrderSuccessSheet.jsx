@@ -36,31 +36,31 @@ export default function OrderSuccessSheet({ order, trackingUrl = "", merchantNot
             <Check size={14} /> Pedido gravado com sucesso
           </div>
           <div style={{ fontSize: "24px", fontWeight: "800", fontFamily: "var(--font-display)", lineHeight: 1.08 }}>
-            O teu pedido ja pode ser acompanhado.
+            O teu pedido já pode ser acompanhado.
           </div>
           <div style={{ marginTop: "8px", fontSize: "13px", color: "var(--color-text-secondary)", lineHeight: 1.7 }}>
-            Guarda este codigo e o link de acompanhamento. O lojista pode agora atualizar o estado da encomenda ao longo do processo.
+            Guarda este código e o link de acompanhamento. O lojista pode agora atualizar o estado da encomenda ao longo do processo.
           </div>
           {deliveredByCloudApi ? (
             <div style={{ marginTop: "10px", fontSize: "12px", color: "#166534", fontWeight: "700" }}>
-              O pedido foi enviado automaticamente ao WhatsApp do lojista com apoio da Cloud API.
+              O pedido foi enviado automaticamente ao WhatsApp do lojista pela integracao oficial.
             </div>
           ) : null}
           {queuedByCloudApi ? (
             <div style={{ marginTop: "10px", fontSize: "12px", color: "#1d4ed8", fontWeight: "700" }}>
-              O pedido entrou na fila de entrega automatica e sera enviado ao lojista sem bloquear a tua compra.
+              O pedido entrou na fila de entrega automática e será enviado ao lojista sem bloquear a tua compra.
             </div>
           ) : null}
           {cloudApiFallback ? (
             <div style={{ marginTop: "10px", fontSize: "12px", color: "#b45309", fontWeight: "700" }}>
-              A entrega automatica falhou e o sistema abriu o WhatsApp como alternativa.
+              A entrega automática falhou e o sistema abriu o WhatsApp como alternativa.
             </div>
           ) : null}
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
           <div style={{ padding: "14px 16px", borderRadius: "20px", background: "var(--color-background-secondary)", border: "0.5px solid var(--color-border-tertiary)" }}>
-            <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-text-secondary)", marginBottom: "6px" }}>Codigo</div>
+            <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-text-secondary)", marginBottom: "6px" }}>Código</div>
             <div style={{ fontSize: "18px", fontWeight: "800", fontFamily: "var(--font-mono)" }}>{order.trackingCode}</div>
             <div style={{ marginTop: "8px" }}>
               <Badge bg={statusMeta.bg} color={statusMeta.color}>

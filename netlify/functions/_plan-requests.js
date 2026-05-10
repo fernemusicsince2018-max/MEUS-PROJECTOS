@@ -19,6 +19,16 @@ const OPEN_PLAN_REQUEST_STATUSES = new Set([
   "needs_correction",
 ]);
 
+const REPLACEABLE_PLAN_REQUEST_STATUSES = new Set([
+  "pending_payment",
+  "needs_correction",
+]);
+
+const LOCKED_PLAN_REQUEST_STATUSES = new Set([
+  "proof_submitted",
+  "under_review",
+]);
+
 const FINAL_PLAN_REQUEST_STATUSES = new Set([
   "activated",
   "rejected",
@@ -47,6 +57,58 @@ const PLAN_PAYMENT_FLOW_SCHEMA_REQUIREMENTS = Object.freeze([
   { tableName: "catalog_plan_payment_proofs", columnName: "request_id" },
   { tableName: "catalog_plan_payment_proofs", columnName: "payment_reference_text" },
 ]);
+
+const PLAN_REQUEST_COLUMNS = Object.freeze([
+  "id",
+  "store_id",
+  "user_id",
+  "plan_id",
+  "plan_code",
+  "plan_name",
+  "store_name",
+  "merchant_email",
+  "reference_id",
+  "store_whatsapp",
+  "product_count",
+  "current_plan_status",
+  "current_plan_name",
+  "duration_days",
+  "total_price",
+  "currency_code",
+  "message_text",
+  "whatsapp_link",
+  "payment_reference",
+  "payment_method",
+  "payment_instructions",
+  "payment_bank_name",
+  "payment_account_name",
+  "payment_account_number",
+  "payment_iban",
+  "payment_proof_status",
+  "merchant_note",
+  "review_note",
+  "paid_amount",
+  "paid_currency_code",
+  "paid_at",
+  "payment_due_at",
+  "last_proof_submitted_at",
+  "status",
+  "requested_at",
+  "resolved_at",
+  "resolved_by_user_id",
+  "activated_at",
+  "activated_by_user_id",
+]);
+
+function buildPlanRequestProjectionSql(alias = "") {
+  const prefix = String(alias || "").trim();
+  return PLAN_REQUEST_COLUMNS
+    .map((columnName) => (prefix ? `${prefix}.${columnName}` : columnName))
+    .join(",\n  ");
+}
+
+const PLAN_REQUEST_SELECT_SQL = buildPlanRequestProjectionSql("requests");
+const PLAN_REQUEST_RETURNING_SQL = buildPlanRequestProjectionSql();
 
 function cleanText(value, maxLength = null) {
   const text = String(value || "").trim();
@@ -188,6 +250,60 @@ function isOpenPlanRequestStatus(value) {
 
 function isFinalPlanRequestStatus(value) {
   return FINAL_PLAN_REQUEST_STATUSES.has(normalizePlanRequestStatus(value));
+}
+
+function resolvePlanActivationRequestAction(request, selection = {}) {
+  if (!request) {
+    return {
+      action: "create",
+      status: "",
+      sameSelection: false,
+      locked: false,
+      replaceable: false,
+    };
+  }
+
+  const status = normalizePlanRequestStatus(request.status);
+  const currentPlanId = cleanText(request.plan_id ?? request.planId, 120);
+  const currentDurationDays = Number(request.duration_days ?? request.durationDays ?? 0);
+  const currentTotalPrice = Number(request.total_price ?? request.totalPrice ?? 0);
+  const nextPlanId = cleanText(selection.planId, 120);
+  const nextDurationDays = Number(selection.durationDays || 0);
+  const nextTotalPrice = Number(selection.totalPrice || 0);
+  const sameSelection =
+    currentPlanId === nextPlanId
+    && currentDurationDays === nextDurationDays
+    && currentTotalPrice === nextTotalPrice;
+  const locked = LOCKED_PLAN_REQUEST_STATUSES.has(status);
+  const replaceable = REPLACEABLE_PLAN_REQUEST_STATUSES.has(status);
+
+  if (sameSelection) {
+    return {
+      action: "reuse",
+      status,
+      sameSelection: true,
+      locked,
+      replaceable,
+    };
+  }
+
+  if (replaceable) {
+    return {
+      action: "replace",
+      status,
+      sameSelection: false,
+      locked: false,
+      replaceable: true,
+    };
+  }
+
+  return {
+    action: "blocked",
+    status,
+    sameSelection: false,
+    locked,
+    replaceable: false,
+  };
 }
 
 function toPlanPaymentProofPayload(row, options = {}) {
@@ -338,9 +454,12 @@ async function mapPlanRequestsWithProofs(queryable, rows = []) {
 }
 
 export {
+  PLAN_REQUEST_RETURNING_SQL,
+  PLAN_REQUEST_SELECT_SQL,
   assertPlanPaymentFlowSchema,
   buildPaymentReference,
   buildPaymentSnapshot,
+  buildPlanRequestProjectionSql,
   cleanDigits,
   cleanText,
   getPlanPaymentFlowSchemaStatus,
@@ -353,6 +472,7 @@ export {
   normalizePlanRequestStatus,
   parseIsoDateOrNull,
   parseMoneyOrNull,
+  resolvePlanActivationRequestAction,
   toPlanActivationRequestPayload,
   toPlanPaymentProofPayload,
 };

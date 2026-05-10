@@ -14,6 +14,7 @@ const DEFAULT_CLIENTS_PAGE_SIZE = 24;
 const MAX_CLIENTS_PAGE_SIZE = 100;
 const DEFAULT_FINANCIAL_EVENTS_PAGE_SIZE = 50;
 const MAX_FINANCIAL_EVENTS_PAGE_SIZE = 200;
+const PENDING_ACCESS_REQUESTS_PREVIEW_LIMIT = 6;
 
 function toClientPayload(row) {
   return {
@@ -673,6 +674,70 @@ async function fetchUrgentClients(pool, allowlistedEmails) {
   };
 }
 
+async function fetchPendingAccessRequests(pool, allowlistedEmails, options = {}) {
+  const limit = parsePositiveInt(
+    options.limit,
+    PENDING_ACCESS_REQUESTS_PREVIEW_LIMIT,
+    PENDING_ACCESS_REQUESTS_PREVIEW_LIMIT,
+  );
+  const values = [];
+  const conditions = [
+    buildMerchantExclusionSql(values, allowlistedEmails),
+    "coalesce(users.deleted_at, stores.deleted_at) is null",
+    "stores.id is null",
+  ];
+  const limitPlaceholder = addParam(values, limit);
+
+  const [countResult, listResult] = await Promise.all([
+    pool.query(
+      `select count(*)::int as total
+       from catalog_users users
+       left join catalog_stores stores on stores.owner_user_id = users.id
+       where ${conditions.join("\n         and ")}`,
+      values.slice(0, values.length - 1),
+    ),
+    pool.query(
+      `select
+         users.id as user_id,
+         users.email,
+         users.full_name,
+         users.role,
+         users.account_status,
+         users.created_at,
+         stores.id as store_id,
+         stores.name as store_name,
+         stores.reference_id,
+         stores.public_enabled,
+         stores.plan_id,
+         stores.plan_status,
+         stores.plan_started_at,
+         stores.plan_expires_at,
+         stores.plan_duration_days,
+         stores.plan_total_price,
+         plans.currency_code as plan_currency_code,
+         stores.internal_notes,
+         0::int as product_count,
+         null::timestamptz as last_activity_at,
+         null::timestamptz as deleted_at,
+         ''::text as deleted_by_user_id,
+         plans.code as plan_code,
+         plans.name as plan_name
+       from catalog_users users
+       left join catalog_stores stores on stores.owner_user_id = users.id
+       left join catalog_plan_definitions plans on plans.id = stores.plan_id
+       where ${conditions.join("\n         and ")}
+       order by users.created_at desc, users.id desc
+       limit ${limitPlaceholder}`,
+      values,
+    ),
+  ]);
+
+  return {
+    total: Number(countResult.rows[0]?.total || 0),
+    items: listResult.rows.map(toClientPayload),
+  };
+}
+
 async function fetchSummary(pool, allowlistedEmails) {
   const values = [];
   const conditions = [buildMerchantExclusionSql(values, allowlistedEmails)];
@@ -692,6 +757,10 @@ async function fetchSummary(pool, allowlistedEmails) {
          where coalesce(users.deleted_at, stores.deleted_at) is null
            and coalesce(stores.public_enabled, false)
        )::int as public_stores,
+       count(*) filter (
+         where coalesce(users.deleted_at, stores.deleted_at) is null
+           and stores.id is null
+       )::int as pending_access_requests,
        count(*) filter (where coalesce(users.deleted_at, stores.deleted_at) is not null)::int as trashed_clients
      from catalog_users users
      left join catalog_stores stores on stores.owner_user_id = users.id
@@ -705,6 +774,7 @@ async function fetchSummary(pool, allowlistedEmails) {
     activeClients: Number(row.active_clients || 0),
     suspendedClients: Number(row.suspended_clients || 0),
     publicStores: Number(row.public_stores || 0),
+    pendingAccessRequests: Number(row.pending_access_requests || 0),
     trashedClients: Number(row.trashed_clients || 0),
   };
 }
@@ -740,20 +810,25 @@ async function handle(event) {
     const financialEventsCursor = String(event.queryStringParameters?.financialEventsCursor || "").trim();
 
     if (scope === "clients") {
-      const visibleClientPage = superAdminAccess.clientes
-        ? await fetchActiveClientsPage(pool, allowlistedEmails, {
-          search,
-          dateFrom,
-          dateTo,
-          limit: clientsLimit,
-          cursor: clientsCursor,
-        })
-        : createEmptyClientPage(clientsLimit);
+      const [visibleClientPage, pendingAccessData] = superAdminAccess.clientes
+        ? await Promise.all([
+          fetchActiveClientsPage(pool, allowlistedEmails, {
+            search,
+            dateFrom,
+            dateTo,
+            limit: clientsLimit,
+            cursor: clientsCursor,
+          }),
+          fetchPendingAccessRequests(pool, allowlistedEmails),
+        ])
+        : [createEmptyClientPage(clientsLimit), { total: 0, items: [] }];
 
       return jsonResponse(200, {
         ok: true,
         clients: visibleClientPage.rows.map(toClientPayload),
         clientPageInfo: visibleClientPage.pageInfo,
+        pendingAccessRequests: pendingAccessData.items,
+        pendingAccessRequestCount: pendingAccessData.total,
       });
     }
 
@@ -795,6 +870,7 @@ async function handle(event) {
       trashedClientPage,
       recentClients,
       urgentClientsData,
+      pendingAccessData,
       settingsResult,
       financialEventsPage,
       planActivationRequestsResult,
@@ -850,6 +926,9 @@ async function handle(event) {
         : Promise.resolve([]),
       superAdminAccess.clientes
         ? fetchUrgentClients(pool, allowlistedEmails)
+        : Promise.resolve({ total: 0, items: [] }),
+      superAdminAccess.clientes
+        ? fetchPendingAccessRequests(pool, allowlistedEmails)
         : Promise.resolve({ total: 0, items: [] }),
       pool.query(settingsQuery),
       superAdminAccess.financeiro
@@ -945,6 +1024,7 @@ async function handle(event) {
     const visibleFinancialEventPageInfo = superAdminAccess.financeiro
       ? financialEventsPage.pageInfo
       : createEmptyFinancialEventsPage(financialEventsLimit).pageInfo;
+    const visiblePendingAccessRequests = superAdminAccess.clientes ? pendingAccessData.items : [];
     const visiblePlanActivationRequests = superAdminAccess.clientes ? planActivationRequests : [];
     const visibleAdminUsers = superAdminAccess.equipa ? adminUsers : [];
     const visibleActiveAdminUsers = visibleAdminUsers.filter((user) => user.accountStatus === "active");
@@ -957,6 +1037,7 @@ async function handle(event) {
         activeClients: superAdminAccess.clientes ? summary.activeClients : 0,
         suspendedClients: superAdminAccess.clientes ? summary.suspendedClients : 0,
         publicStores: superAdminAccess.clientes ? summary.publicStores : 0,
+        pendingAccessRequests: superAdminAccess.clientes ? summary.pendingAccessRequests : 0,
         activePlans: visiblePlans.filter((plan) => plan.active).length,
         trashedClients: superAdminAccess.lixo ? summary.trashedClients : 0,
         pendingPlanRequests: visiblePlanActivationRequests.length,
@@ -971,6 +1052,7 @@ async function handle(event) {
       recentClients,
       urgentClients: urgentClientsData.items,
       urgentClientsTotal: urgentClientsData.total,
+      pendingAccessRequests: visiblePendingAccessRequests,
       adminUsers: visibleAdminUsers,
       plans: visiblePlans,
       settings: visibleSettings,

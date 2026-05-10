@@ -56,6 +56,20 @@ function clearCachedValue(key) {
   } catch (error) {}
 }
 
+function patchCachedValue(key, patcher) {
+  const cached = readCachedValue(key);
+  if (!cached?.payload || typeof patcher !== "function") {
+    return "";
+  }
+
+  const nextPayload = patcher(cached.payload);
+  if (!nextPayload) {
+    return "";
+  }
+
+  return writeCachedValue(key, nextPayload);
+}
+
 export function createAuthService(config) {
   const base = (config.apiBaseUrl || "").replace(/\/$/, "");
   const requestCredentials = config.requestCredentials || "same-origin";
@@ -278,7 +292,14 @@ export function createAuthService(config) {
         body: JSON.stringify(payload),
       });
 
-      return parseResponse(response, "Nao foi possivel registar o pedido de ativacao.");
+      const data = await parseResponse(response, "Nao foi possivel registar o pedido de ativacao.");
+      if (data?.request) {
+        patchCachedValue(MERCHANT_PLAN_OPTIONS_CACHE_KEY, (current) => ({
+          ...current,
+          activeRequest: data.request,
+        }));
+      }
+      return data;
     },
     async submitPlanPaymentProof(payload) {
       ensureBase();
@@ -291,7 +312,14 @@ export function createAuthService(config) {
         body: JSON.stringify(payload),
       });
 
-      return parseResponse(response, "Nao foi possivel enviar o comprovativo do plano.");
+      const data = await parseResponse(response, "Nao foi possivel enviar o comprovativo do plano.");
+      if (data?.request) {
+        patchCachedValue(MERCHANT_PLAN_OPTIONS_CACHE_KEY, (current) => ({
+          ...current,
+          activeRequest: data.request,
+        }));
+      }
+      return data;
     },
     async getSuperAdminDashboard(options = {}) {
       ensureBase();
@@ -403,7 +431,7 @@ export function createAuthService(config) {
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: "same-origin",
+        credentials: requestCredentials,
         body: JSON.stringify(payload),
       });
 

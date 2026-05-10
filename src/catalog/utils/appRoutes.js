@@ -5,6 +5,7 @@ const RAW_BASE_URL =
 
 const APP_BASE_PATH =
   RAW_BASE_URL && RAW_BASE_URL !== "/" ? RAW_BASE_URL.replace(/\/$/, "") : "";
+const MERCHANT_APP_PATH = "/painel";
 
 function normalizePathname(pathname) {
   const text = String(pathname || "/").trim();
@@ -58,7 +59,7 @@ export function buildAuthPath() {
 }
 
 export function buildMerchantAppPath() {
-  return applyBasePath("/app");
+  return applyBasePath(MERCHANT_APP_PATH);
 }
 
 export function buildSuperAdminPath() {
@@ -98,32 +99,8 @@ export function updateBrowserLocation(pathname, options = {}) {
 export function readAppRoute(locationObject = typeof window !== "undefined" ? window.location : null) {
   const pathname = normalizePathname(locationObject?.pathname || "/");
   const normalizedPath = stripBasePath(pathname);
-  const hash = String(locationObject?.hash || "");
   const search = String(locationObject?.search || "");
   const searchParams = new URLSearchParams(search);
-
-  const legacyTrackingMatch = hash.match(/^#o:(.+)$/);
-  if (legacyTrackingMatch) {
-    const token = safeDecode(legacyTrackingMatch[1]);
-    return {
-      kind: "tracking",
-      token,
-      fromLegacyHash: true,
-      canonicalPath: buildTrackingPath(token),
-    };
-  }
-
-  const legacyCatalogMatch = hash.match(/^#v:(.+)$/);
-  if (legacyCatalogMatch) {
-    const storeId = safeDecode(legacyCatalogMatch[1]);
-    return {
-      kind: "publicCatalog",
-      storeId,
-      preview: false,
-      fromLegacyHash: true,
-      canonicalPath: buildPublicCatalogPath(storeId),
-    };
-  }
 
   if (normalizedPath === "/" || normalizedPath === "") {
     return { kind: "home", canonicalPath: buildRootPath() };
@@ -133,7 +110,7 @@ export function readAppRoute(locationObject = typeof window !== "undefined" ? wi
     return { kind: "auth", canonicalPath: buildAuthPath() };
   }
 
-  if (normalizedPath === "/app") {
+  if (normalizedPath === MERCHANT_APP_PATH) {
     return { kind: "merchantApp", canonicalPath: buildMerchantAppPath() };
   }
 
@@ -147,7 +124,6 @@ export function readAppRoute(locationObject = typeof window !== "undefined" ? wi
     return {
       kind: "tracking",
       token,
-      fromLegacyHash: false,
       canonicalPath: buildTrackingPath(token),
     };
   }
@@ -160,7 +136,6 @@ export function readAppRoute(locationObject = typeof window !== "undefined" ? wi
       kind: "publicCatalog",
       storeId,
       preview,
-      fromLegacyHash: false,
       canonicalPath: buildPublicCatalogPath(storeId, { preview }),
     };
   }

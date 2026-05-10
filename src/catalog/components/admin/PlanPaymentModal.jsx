@@ -224,7 +224,7 @@ export default function PlanPaymentModal({
               Pagamento do plano {request.planName || "comercial"}
             </div>
             <div style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-              Pedido criado em {formatDateTimeLabel(request.requestedAt)}. Usa este painel para pagar, enviar o comprovativo e acompanhar a revisao.
+              Pedido criado em {formatDateTimeLabel(request.requestedAt)}. Usa este painel para pagar, enviar o comprovativo e acompanhar a revisão.
             </div>
           </div>
 
@@ -376,16 +376,16 @@ export default function PlanPaymentModal({
                     <input value={proofDraft.payerName} onChange={(event) => setProofDraft((current) => ({ ...current, payerName: event.target.value }))} placeholder="Quem fez o pagamento?" style={FIELD_STYLE} />
                   </FLabel>
                   <FLabel label="Telefone do pagador *">
-                    <input value={proofDraft.payerPhone} onChange={(event) => setProofDraft((current) => ({ ...current, payerPhone: event.target.value }))} placeholder="Ex: 923000000" style={FIELD_STYLE} />
+                    <input value={proofDraft.payerPhone} onChange={(event) => setProofDraft((current) => ({ ...current, payerPhone: event.target.value }))} placeholder="Ex.: 923000000." style={FIELD_STYLE} />
                   </FLabel>
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>
                   <FLabel label="Referencia do pagamento">
-                    <input value={proofDraft.paymentReferenceText} onChange={(event) => setProofDraft((current) => ({ ...current, paymentReferenceText: event.target.value }))} placeholder="Referencia usada no comprovativo" style={FIELD_STYLE} />
+                    <input value={proofDraft.paymentReferenceText} onChange={(event) => setProofDraft((current) => ({ ...current, paymentReferenceText: event.target.value }))} placeholder="Referencia usada no comprovativo." style={FIELD_STYLE} />
                   </FLabel>
                   <FLabel label="Valor pago *">
-                    <input value={proofDraft.paidAmount} onChange={(event) => setProofDraft((current) => ({ ...current, paidAmount: event.target.value }))} placeholder="Ex: 5000" inputMode="decimal" style={FIELD_STYLE} />
+                    <input value={proofDraft.paidAmount} onChange={(event) => setProofDraft((current) => ({ ...current, paidAmount: event.target.value }))} placeholder="Ex.: 5000." inputMode="decimal" style={FIELD_STYLE} />
                   </FLabel>
                 </div>
 
@@ -406,7 +406,7 @@ export default function PlanPaymentModal({
                 </div>
 
                 <FLabel label="Observacao opcional">
-                  <textarea value={proofDraft.note} onChange={(event) => setProofDraft((current) => ({ ...current, note: event.target.value }))} placeholder="Ex: pagamento feito a partir da conta da empresa." rows={3} style={TEXTAREA_STYLE} />
+                  <textarea value={proofDraft.note} onChange={(event) => setProofDraft((current) => ({ ...current, note: event.target.value }))} placeholder="Ex.: pagamento feito a partir da conta da empresa." rows={3} style={TEXTAREA_STYLE} />
                 </FLabel>
 
                 {error ? (
@@ -423,7 +423,7 @@ export default function PlanPaymentModal({
 
             {!canSubmitProof && request.status !== "activated" ? (
               <div style={{ fontSize: "12px", color: "var(--color-text-secondary)", background: "var(--color-background-secondary)", borderRadius: "14px", padding: "12px 14px" }}>
-                O comprovativo ja foi enviado. Agora a equipa precisa concluir a revisao antes de qualquer nova acao.
+                O comprovativo já foi enviado. Agora a equipa precisa concluir a revisão antes de qualquer nova ação.
               </div>
             ) : null}
           </section>

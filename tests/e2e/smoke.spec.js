@@ -51,13 +51,21 @@ async function registerMerchant(page, account) {
   await page.getByTestId("auth-register-store-name").fill(account.storeName);
   await page.getByTestId("auth-register-full-name").fill("QA Browser");
   await page.getByTestId("auth-register-email").fill(account.email);
+  await page.getByTestId("auth-register-country").selectOption(account.country);
+  await page.getByTestId("auth-register-phone").fill(account.phone);
   await page.getByTestId("auth-register-password").fill(INITIAL_PASSWORD);
   await page.getByTestId("auth-register-confirm-password").fill(INITIAL_PASSWORD);
   await page.getByTestId("auth-register-submit").click();
 
-  await page.waitForURL(/\/app$/, { timeout: 20000 });
+  const approvalLink = await page.locator("a").filter({ hasText: /^https?:\/\//i }).getAttribute("href");
+  expect(approvalLink).toBeTruthy();
+  await page.goto(String(approvalLink));
+  await expect(page.getByText(/Loja .* aprovada com sucesso|Loja aprovada com sucesso/i)).toBeVisible({ timeout: 20000 });
+  await page.getByTestId("auth-login-password").fill(INITIAL_PASSWORD);
+  await page.getByTestId("auth-login-submit").click();
+  await page.waitForURL(/\/painel$/, { timeout: 20000 });
   await expect(page.getByTestId("admin-open-catalog-preview")).toBeVisible({ timeout: 20000 });
-  await expect(page.getByText("Conta criada com sucesso.")).toBeVisible();
+  await expect(page.getByText("Sessao iniciada com sucesso.")).toBeVisible();
 }
 
 async function configureStore(page) {
@@ -111,7 +119,7 @@ async function createOrder(page) {
 }
 
 async function logout(page) {
-  await page.goto("/app");
+  await page.goto("/painel");
   await expect(page.getByTestId("admin-logout")).toBeVisible({ timeout: 20000 });
   await page.getByTestId("admin-logout").click();
   await page.waitForURL(/\/auth(?:\?.*)?$/, { timeout: 20000 });
@@ -147,7 +155,7 @@ async function loginWithResetPassword(page, email) {
   await page.getByTestId("auth-login-password").fill(RESET_PASSWORD);
   await page.getByTestId("auth-login-submit").click();
 
-  await page.waitForURL(/\/app$/, { timeout: 20000 });
+  await page.waitForURL(/\/painel$/, { timeout: 20000 });
   await expect(page.getByTestId("admin-open-catalog-preview")).toBeVisible({ timeout: 20000 });
   await expect(page.getByText("Sessao iniciada com sucesso.")).toBeVisible();
 }
@@ -157,7 +165,9 @@ test("merchant can publish, sell, and recover access in browser smoke flow", asy
 
   const slug = uniqueSlug("browser");
   const account = {
+    country: "Angola",
     email: `${slug}@example.com`,
+    phone: "923000000",
     storeName: `Loja ${slug}`,
     productName: `Produto ${slug}`,
   };

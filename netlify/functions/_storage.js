@@ -77,7 +77,7 @@ async function ensureBucketReady(config) {
 
   if (existingResponse.status !== 404) {
     const payload = await existingResponse.text().catch(() => "");
-    throw new Error(payload || "Nao foi possivel validar o bucket de storage.");
+    throw new Error(payload || "Nao foi possivel validar o espaco de imagens.");
   }
 
   const createResponse = await storageRequest(config, "/storage/v1/bucket", {
@@ -94,7 +94,7 @@ async function ensureBucketReady(config) {
 
   if (!createResponse.ok && createResponse.status !== 409) {
     const payload = await createResponse.text().catch(() => "");
-    throw new Error(payload || "Nao foi possivel criar o bucket de storage.");
+    throw new Error(payload || "Nao foi possivel preparar o espaco de imagens.");
   }
 }
 
@@ -196,7 +196,7 @@ async function uploadStorageObject({
   maxBytesMessage,
 }) {
   if (!config.enabled) {
-    const error = new Error("O storage ainda nao esta configurado. Define SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY.");
+    const error = new Error("O servico de imagens ainda nao esta configurado. Define SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY.");
     error.status = 503;
     throw error;
   }
@@ -234,7 +234,7 @@ async function uploadStorageObject({
   if (!uploadResponse.ok) {
     const payload = await uploadResponse.text().catch(() => "");
     const parsed = parseJsonSafely(payload);
-    throw new Error(parsed?.message || parsed?.error || payload || "Nao foi possivel gravar o ficheiro no storage.");
+    throw new Error(parsed?.message || parsed?.error || payload || "Nao foi possivel guardar o ficheiro no servico de imagens.");
   }
 
   return {
@@ -249,7 +249,7 @@ async function uploadStorageObject({
 export async function createSignedStorageUrl({ bucket, objectPath, expiresInSeconds = 900 }) {
   const config = getStorageBaseConfig();
   if (!config.enabled) {
-    const error = new Error("O storage privado ainda nao esta configurado.");
+    const error = new Error("A area privada de ficheiros ainda nao esta configurada.");
     error.status = 503;
     throw error;
   }
@@ -294,7 +294,7 @@ export async function uploadPublicImageAsset({ dataUrl, scope, ownerId, fileName
     allowedMimeTypes: PUBLIC_IMAGE_MIME_TYPES,
     maxBytes: 4 * 1024 * 1024,
     invalidFormatMessage: "A imagem precisa de estar num formato PNG, JPG ou WebP valido.",
-    invalidMimeTypeMessage: "O storage aceita uploads em PNG, JPG ou WebP.",
+    invalidMimeTypeMessage: "O sistema aceita imagens em PNG, JPG ou WebP.",
     maxBytesMessage: "A imagem ficou grande demais para ser enviada.",
   });
 }

@@ -21,5 +21,12 @@ export function getCatalogIdentityConflictMessage(error) {
     return "Este numero fiscal ou documento ja esta registado noutra empresa.";
   }
 
+  if (
+    constraint === "idx_catalog_stores_business_phone_unique_active"
+    || constraint === "idx_catalog_stores_whatsapp_unique_active"
+  ) {
+    return "Este numero de telemovel ja esta associado a outra loja.";
+  }
+
   return "";
 }

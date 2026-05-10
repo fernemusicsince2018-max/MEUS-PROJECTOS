@@ -11,6 +11,8 @@ function cleanImageValue(value) {
   return String(value || "").trim();
 }
 
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+
 function normalizeWhatsAppOrderFormat(value) {
   return String(value || "").trim().toLowerCase() === "with_image_links"
     ? "with_image_links"
@@ -130,6 +132,33 @@ function isPlanDateExpired(value) {
   return expiryDay < todayDay;
 }
 
+function getCalendarDayTimestamp(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return Number.NaN;
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+function getCalendarDayEndTimestamp(value) {
+  const dayStart = getCalendarDayTimestamp(value);
+  if (!Number.isFinite(dayStart)) return Number.NaN;
+  return dayStart + DAY_IN_MS - 1;
+}
+
+function formatRemainingUnit(value, singular, plural) {
+  return `${value} ${value === 1 ? singular : plural}`;
+}
+
+function joinRemainingParts(parts) {
+  if (parts.length <= 1) return parts[0] || "";
+  if (parts.length === 2) return `${parts[0]} e ${parts[1]}`;
+  return `${parts.slice(0, -1).join(", ")} e ${parts[parts.length - 1]}`;
+}
+
+export function supportsPlanCountdown(planStatus) {
+  const normalized = String(planStatus || "").trim().toLowerCase();
+  return normalized === "active" || normalized === "trial";
+}
+
 export function getPlanAccessState(planStatus, planExpiresAt) {
   const normalizedStatus = String(planStatus || "").trim().toLowerCase();
   const expired = isPlanDateExpired(planExpiresAt);
@@ -173,6 +202,149 @@ export function getPlanAccessState(planStatus, planExpiresAt) {
   return {
     allowed: false,
     message: "Ativa um plano para deixar a tua loja ativa ao cliente e voltar a gerir produtos.",
+  };
+}
+
+export function resolveMerchantPlanSnapshot(session = null, planCatalogStore = null) {
+  const sessionStoreId = String(session?.storeId || "").trim();
+  const planStoreId = String(planCatalogStore?.id || "").trim();
+  const canUsePlanCatalogStore = Boolean(planStoreId) && (!sessionStoreId || planStoreId === sessionStoreId);
+
+  return {
+    storeId: canUsePlanCatalogStore ? planStoreId : sessionStoreId,
+    storeName: String(
+      (canUsePlanCatalogStore ? planCatalogStore?.name : "")
+      || session?.storeName
+      || "",
+    ).trim(),
+    planStatus:
+      (canUsePlanCatalogStore ? planCatalogStore?.currentPlanStatus : null)
+      || session?.planStatus
+      || null,
+    planExpiresAt:
+      (canUsePlanCatalogStore ? planCatalogStore?.currentPlanExpiresAt : null)
+      || session?.planExpiresAt
+      || null,
+    referenceId:
+      (canUsePlanCatalogStore ? planCatalogStore?.referenceId : "")
+      || session?.referenceId
+      || "",
+  };
+}
+
+export function getPlanCountdown(planStatus, planExpiresAt, referenceDate = new Date()) {
+  const normalizedStatus = String(planStatus || "").trim().toLowerCase();
+  if (!supportsPlanCountdown(normalizedStatus) || !planExpiresAt) {
+    return null;
+  }
+
+  const expiresAtTime = getCalendarDayTimestamp(planExpiresAt);
+  const todayTime = getCalendarDayTimestamp(referenceDate);
+  if (!Number.isFinite(expiresAtTime) || !Number.isFinite(todayTime)) {
+    return null;
+  }
+
+  const daysRemaining = Math.ceil((expiresAtTime - todayTime) / DAY_IN_MS);
+  const isTrial = normalizedStatus === "trial";
+  const subject = isTrial ? "Trial" : "Plano";
+  if (daysRemaining < 0) {
+    const daysExpired = Math.abs(daysRemaining);
+    return {
+      daysRemaining,
+      bg: "#fee2e2",
+      color: "#b91c1c",
+      borderColor: "#fecaca",
+      label: daysExpired === 1 ? `${subject} expirou ontem` : `${subject} expirou ha ${daysExpired} dias`,
+    };
+  }
+
+  if (daysRemaining === 0) {
+    return {
+      daysRemaining,
+      bg: "#fef3c7",
+      color: "#b45309",
+      borderColor: "#fde68a",
+      label: isTrial ? "Trial termina hoje" : "Termina hoje",
+    };
+  }
+
+  if (daysRemaining <= 7) {
+    return {
+      daysRemaining,
+      bg: "#fef3c7",
+      color: "#b45309",
+      borderColor: "#fde68a",
+      label: daysRemaining === 1
+        ? (isTrial ? "Trial: 1 dia restante" : "1 dia restante")
+        : (isTrial ? `Trial: ${daysRemaining} dias restantes` : `${daysRemaining} dias restantes`),
+    };
+  }
+
+  return {
+    daysRemaining,
+    bg: "#dcfce7",
+    color: "#166534",
+    borderColor: "#bbf7d0",
+    label: daysRemaining === 1
+      ? (isTrial ? "Trial: 1 dia restante" : "1 dia restante")
+      : (isTrial ? `Trial: ${daysRemaining} dias restantes` : `${daysRemaining} dias restantes`),
+  };
+}
+
+export function getPlanTimeRemaining(planStatus, planExpiresAt, referenceTime = Date.now()) {
+  const normalizedStatus = String(planStatus || "").trim().toLowerCase();
+  if (!supportsPlanCountdown(normalizedStatus) || !planExpiresAt) {
+    return null;
+  }
+
+  const expiresAtTime = getCalendarDayEndTimestamp(planExpiresAt);
+  const nowTime = referenceTime instanceof Date ? referenceTime.getTime() : Number(referenceTime);
+  if (!Number.isFinite(expiresAtTime) || !Number.isFinite(nowTime)) {
+    return null;
+  }
+
+  const diffMs = expiresAtTime - nowTime;
+  if (diffMs < 0) {
+    const daysExpired = Math.max(1, Math.ceil(Math.abs(diffMs) / DAY_IN_MS));
+    return {
+      compactLabel: "Tempo esgotado",
+      detailLabel: daysExpired === 1 ? "Expirou ontem." : `Expirou ha ${daysExpired} dias.`,
+      bg: "#fff1f2",
+      color: "#9f1239",
+      borderColor: "#fecdd3",
+    };
+  }
+
+  const totalMinutes = Math.max(0, Math.ceil(diffMs / (60 * 1000)));
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const minutes = totalMinutes % 60;
+  const compactParts = [];
+  const detailParts = [];
+
+  if (days > 0) {
+    compactParts.push(`${days}d`);
+    detailParts.push(formatRemainingUnit(days, "dia", "dias"));
+  }
+
+  compactParts.push(`${String(hours).padStart(2, "0")}h`);
+  compactParts.push(`${String(minutes).padStart(2, "0")}m`);
+
+  if (hours > 0 || days > 0) {
+    detailParts.push(formatRemainingUnit(hours, "hora", "horas"));
+  }
+  detailParts.push(formatRemainingUnit(minutes, "minuto", "minutos"));
+
+  const warning = days <= 7;
+  const isTrial = normalizedStatus === "trial";
+  return {
+    compactLabel: compactParts.join(" "),
+    detailLabel: isTrial
+      ? `Faltam ${joinRemainingParts(detailParts)} para o trial terminar.`
+      : `Faltam ${joinRemainingParts(detailParts)}.`,
+    bg: warning ? "#fff7ed" : "#ecfdf5",
+    color: warning ? "#9a3412" : "#166534",
+    borderColor: warning ? "#fed7aa" : "#bbf7d0",
   };
 }
 

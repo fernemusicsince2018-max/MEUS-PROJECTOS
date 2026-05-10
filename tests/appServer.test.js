@@ -83,7 +83,8 @@ function requestWithHost(port, pathname, hostHeader) {
 
 export async function runAppServerTests() {
   assert.equal(shouldServeSpaShell("/"), true);
-  assert.equal(shouldServeSpaShell("/app"), true);
+  assert.equal(shouldServeSpaShell("/painel"), true);
+  assert.equal(shouldServeSpaShell("/app"), false);
   assert.equal(shouldServeSpaShell("/catalog/loja-demo"), true);
   assert.equal(shouldServeSpaShell("/api/catalog-get"), false);
   assert.equal(shouldServeSpaShell("/favicon.svg"), false);
@@ -147,10 +148,13 @@ export async function runAppServerTests() {
     assert.equal(healthResponse.status, 200);
     assert.deepEqual(await healthResponse.json(), { ok: true });
 
-    const spaResponse = await fetch(`${baseUrl}/app`);
+    const spaResponse = await fetch(`${baseUrl}/painel`);
     assert.equal(spaResponse.status, 200);
     assert.match(String(spaResponse.headers.get("content-type") || ""), /text\/html/);
     assert.match(await spaResponse.text(), /shell/);
+
+    const removedLegacyRouteResponse = await fetch(`${baseUrl}/app`);
+    assert.equal(removedLegacyRouteResponse.status, 404);
 
     const catalogResponse = await fetch(`${baseUrl}/catalog/loja-demo`);
     assert.equal(catalogResponse.status, 200);

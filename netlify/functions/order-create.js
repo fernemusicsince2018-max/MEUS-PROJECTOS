@@ -1,4 +1,5 @@
 import { getPlanAccessState } from "./_auth.js";
+import { registerNewOrderMetrics } from "./_order-metrics.js";
 import {
   calculateOrderDiscountAmount,
   createCustomerProfileId,
@@ -406,6 +407,12 @@ async function handle(event) {
       });
 
       await registerNewOrderStats(connection, normalizedOrder.storeId, "pending");
+      await registerNewOrderMetrics(connection, {
+        storeId: normalizedOrder.storeId,
+        createdAt: insertedOrder.created_at,
+        totalAmount: insertedOrder.total_amount,
+        status: insertedOrder.status,
+      });
 
       const trackingUrl = buildTrackingUrl(event, mappedOrder.trackingToken, appBaseUrl);
       const notificationCapability = getMerchantOrderWhatsAppCapability(store);

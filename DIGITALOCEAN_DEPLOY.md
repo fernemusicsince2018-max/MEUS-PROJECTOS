@@ -59,8 +59,8 @@ No painel da DigitalOcean:
 1. Cria um cluster `PostgreSQL`.
 2. Escolhe a regiao `fra1`.
 3. Escolhe uma major version estavel, por exemplo `17`.
-4. Cria a base `catalogo_prod`.
-5. Cria um utilizador dedicado, por exemplo `catalogo_app`.
+4. Cria a base `kastrozap_prod`.
+5. Cria um utilizador dedicado, por exemplo `kastrozap_app`.
 6. Cria um connection pool chamado `catalog-pool` em `transaction mode`.
 
 Sugestao inicial:
@@ -113,8 +113,8 @@ Depois do primeiro deploy:
 1. entra na app
 2. `Add component` -> `Create or attach database`
 3. anexa o cluster PostgreSQL criado
-4. seleciona a base `catalogo_prod`
-5. seleciona o user `catalogo_app`
+4. seleciona a base `kastrozap_prod`
+5. seleciona o user `kastrozap_app`
 
 Depois disso, o App Platform disponibiliza bindable variables para o cluster e para o pool.
 
@@ -191,7 +191,7 @@ Usa [.env.production.example](./.env.production.example) como checklist e mapeia
 ### Branding opcional
 
 - `VITE_BRAND_NAME=KASTROZAPP`
-- `VITE_BRAND_TAGLINE=Sua loja no WhatsApp.`
+- `VITE_BRAND_TAGLINE=Vende mais no WhatsApp.`
 - `VITE_BRAND_ACCENT=#25ae82`
 - `VITE_BRAND_DARK=#1b1c48`
 - `VITE_BRAND_HIGHLIGHT=#ffc61a`

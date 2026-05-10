@@ -76,7 +76,7 @@ function escapeAttribute(value) {
 function getBrandConfig(env = process.env) {
   return {
     name: cleanText(env.VITE_BRAND_NAME || env.BRAND_NAME) || "KastroZap",
-    tagline: cleanText(env.VITE_BRAND_TAGLINE || env.BRAND_TAGLINE) || "Sua loja no WhatsApp.",
+    tagline: cleanText(env.VITE_BRAND_TAGLINE || env.BRAND_TAGLINE) || "Vende mais no WhatsApp.",
     accent: cleanText(env.VITE_BRAND_ACCENT || env.BRAND_ACCENT) || "#25ae82",
     dark: cleanText(env.VITE_BRAND_DARK || env.BRAND_DARK) || "#1b1c48",
     logoUrl: cleanText(env.VITE_BRAND_LOGO_URL || env.BRAND_LOGO_URL) || "/pwa-icon.svg",
@@ -124,7 +124,9 @@ function injectManagedHead(html = "", metadata = {}) {
   const imageUrl = cleanText(metadata.imageUrl);
   const robots = cleanText(metadata.robots);
   const title = cleanText(metadata.title) || "KastroZap";
-  const description = cleanText(metadata.description) || "Sua loja no WhatsApp com catalogo digital.";
+  const description =
+    cleanText(metadata.description)
+    || "Sua loja pronta para vender no WhatsApp com catalogo online e painel mobile.";
   const appTitle = cleanText(metadata.appTitle) || title;
   const themeColor = cleanText(metadata.themeColor) || "#25ae82";
   const twitterCard = imageUrl ? "summary_large_image" : "summary";
@@ -285,8 +287,8 @@ async function buildSpaMetadata(pathname, request, runFunction, env = process.en
   const origin = getRequestOrigin(request, env);
   const normalizedPath = normalizePathname(pathname);
   const defaultMetadata = {
-    title: brand.name,
-    description: `${brand.tagline} Catalogo web para clientes e painel do lojista instalavel.`,
+    title: `${brand.name} | Sua loja pronta para vender no WhatsApp`,
+    description: `${brand.tagline} Catalogo online com link profissional e painel mobile para o lojista.`,
     themeColor: brand.accent,
     appTitle: brand.name,
     canonicalUrl: `${origin}${normalizedPath === "/" ? "/" : normalizedPath}`,
@@ -388,7 +390,7 @@ async function buildSpaMetadata(pathname, request, runFunction, env = process.en
     };
   }
 
-  if (normalizedPath === "/app") {
+  if (normalizedPath === "/painel") {
     return {
       ...defaultMetadata,
       title: `Painel do lojista | ${brand.name}`,
@@ -560,6 +562,7 @@ export function shouldServeSpaShell(pathname = "") {
   const normalizedPath = normalizePathname(pathname);
   if (normalizedPath === "/health" || normalizedPath === "/api/health") return false;
   if (isApiRequestPath(normalizedPath)) return false;
+  if (normalizedPath === "/app") return false;
   return !hasKnownFileExtension(normalizedPath);
 }
 

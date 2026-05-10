@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { getSessionContext } from "./_auth.js";
 import { ensureDatabaseReady, getPool, jsonResponse, withCors } from "./_postgres.js";
 import {
+  PLAN_REQUEST_RETURNING_SQL,
+  PLAN_REQUEST_SELECT_SQL,
   assertPlanPaymentFlowSchema,
   mapPlanRequestsWithProofs,
   parseIsoDateOrNull,
@@ -10,48 +12,6 @@ import {
 import { uploadPrivateFileAsset } from "./_storage.js";
 
 const MERCHANT_PROOF_SUBMITTABLE_STATUSES = new Set(["pending_payment", "needs_correction"]);
-
-const PLAN_REQUEST_SELECT_SQL = `
-  requests.id,
-  requests.store_id,
-  requests.user_id,
-  requests.plan_id,
-  requests.plan_code,
-  requests.plan_name,
-  requests.store_name,
-  requests.merchant_email,
-  requests.reference_id,
-  requests.store_whatsapp,
-  requests.product_count,
-  requests.current_plan_status,
-  requests.current_plan_name,
-  requests.duration_days,
-  requests.total_price,
-  requests.currency_code,
-  requests.message_text,
-  requests.whatsapp_link,
-  requests.payment_reference,
-  requests.payment_method,
-  requests.payment_instructions,
-  requests.payment_bank_name,
-  requests.payment_account_name,
-  requests.payment_account_number,
-  requests.payment_iban,
-  requests.payment_proof_status,
-  requests.merchant_note,
-  requests.review_note,
-  requests.paid_amount,
-  requests.paid_currency_code,
-  requests.paid_at,
-  requests.payment_due_at,
-  requests.last_proof_submitted_at,
-  requests.status,
-  requests.requested_at,
-  requests.resolved_at,
-  requests.resolved_by_user_id,
-  requests.activated_at,
-  requests.activated_by_user_id
-`;
 
 function cleanText(value, maxLength = null) {
   const text = String(value || "").trim();
@@ -205,10 +165,10 @@ async function handle(event) {
                 requested_at = coalesce(requests.requested_at, now()),
                 resolved_at = null,
                 resolved_by_user_id = null
-          where requests.id = $1
-          returning
-            ${PLAN_REQUEST_SELECT_SQL}`,
-        [
+           where requests.id = $1
+           returning
+             ${PLAN_REQUEST_RETURNING_SQL}`,
+         [
           requestId,
           note,
           paidAmount,

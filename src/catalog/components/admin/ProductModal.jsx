@@ -120,7 +120,7 @@ export default function ProductModal({ prod, onSave, onClose, color, currencyCod
 
     const name = form.name.trim();
     const price = parseMoney(form.price);
-    const compareAt = form.onPromotion ? parseMoney(form.compareAt) : 0;
+    const compareAt = parseMoney(form.compareAt);
     const stock = form.stock === "" ? "" : Math.max(0, Math.floor(Number(form.stock) || 0));
     const images = form.images.map((entry) => String(entry || "").trim()).filter(Boolean);
 
@@ -159,7 +159,7 @@ export default function ProductModal({ prod, onSave, onClose, color, currencyCod
       compareAt,
       stock,
       featured: Boolean(form.featured),
-      onPromotion: Boolean(form.onPromotion),
+      onPromotion: Boolean(form.onPromotion) || (compareAt > price && price > 0),
       available: Boolean(form.available),
     });
   }
@@ -196,11 +196,11 @@ export default function ProductModal({ prod, onSave, onClose, color, currencyCod
             bodyStyle={{ gap: "14px" }}
           >
             <FLabel label="Nome do produto *">
-              <input data-testid="product-name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Ex: Camiseta Basica" style={FIELD_STYLE} />
+              <input data-testid="product-name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Ex.: Camiseta Basica." style={FIELD_STYLE} />
             </FLabel>
 
             <FLabel label="Descricao">
-              <textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Cor, tamanho, material..." rows={3} style={TEXTAREA_STYLE} />
+              <textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Cor, tamanho e material." rows={3} style={TEXTAREA_STYLE} />
             </FLabel>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
@@ -208,34 +208,28 @@ export default function ProductModal({ prod, onSave, onClose, color, currencyCod
                 <input data-testid="product-price" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} placeholder="29,90" inputMode="decimal" style={FIELD_STYLE} />
               </FLabel>
 
-              <FLabel label={`Preco antigo (${currencySymbol})`} hint={form.onPromotion ? "Opcional. Se preencheres, o desconto aparece no catalogo." : "Ativa promocao abaixo para usar este campo."}>
+              <FLabel label={`Preço antigo (${currencySymbol})`} hint="Opcional. Se preencheres um valor maior do que o preco atual, o desconto aparece no catalogo automaticamente.">
                 <input
                   value={form.compareAt}
                   onChange={(event) => setForm({ ...form, compareAt: event.target.value })}
                   placeholder="39,90"
                   inputMode="decimal"
-                  disabled={!form.onPromotion}
-                  style={{
-                    ...FIELD_STYLE,
-                    background: form.onPromotion ? FIELD_STYLE.background : "var(--color-background-secondary)",
-                    cursor: form.onPromotion ? "text" : "not-allowed",
-                    opacity: form.onPromotion ? 1 : 0.7,
-                  }}
+                  style={FIELD_STYLE}
                 />
               </FLabel>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
               <FLabel label="Categoria">
-                <input value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} placeholder="Roupas, Calcados..." style={FIELD_STYLE} />
+                <input value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} placeholder="Roupas e calcados." style={FIELD_STYLE} />
               </FLabel>
 
-              <FLabel label="Stock" hint="Deixa vazio para stock livre">
+              <FLabel label="Stock" hint="Deixa vazio para stock livre.">
                 <input value={form.stock} onChange={(event) => setForm({ ...form, stock: event.target.value })} placeholder="10" type="number" min="0" style={FIELD_STYLE} />
               </FLabel>
             </div>
 
-            <FLabel label="Fotos do produto" hint="Podes adicionar ate 4 imagens. A primeira vira a capa do produto no carrinho e nos pedidos. Se quiseres que a foto possa seguir no WhatsApp como link, usa uma URL publica neste campo em vez de carregar apenas do computador.">
+            <FLabel label="Fotos do produto" hint="Podes adicionar até 4 imagens. A primeira vira a capa do produto no carrinho e nos pedidos. Se quiseres que a foto possa seguir no WhatsApp como link, usa uma URL pública neste campo em vez de carregar apenas do computador.">
               <div style={{ display: "grid", gap: "12px" }}>
                 <div style={{ padding: "10px 12px", borderRadius: "var(--border-radius-md)", background: readyImageCount > 0 ? "rgba(22,163,74,0.08)" : "var(--color-background-secondary)", color: readyImageCount > 0 ? "#166534" : "var(--color-text-secondary)", fontSize: "12px", fontWeight: "700" }}>
                   {isPreparingImages ? "A preparar e enviar fotos..." : `Fotos prontas para guardar: ${readyImageCount}/4`}
@@ -297,7 +291,7 @@ export default function ProductModal({ prod, onSave, onClose, color, currencyCod
                   )}
                 </div>
                 <div style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                  Forma mais segura: seleciona logo as 4 fotos de uma vez. O sistema otimiza e envia para storage antes de guardar.
+                  Forma mais segura: seleciona logo as 4 fotos de uma vez. O sistema otimiza e prepara tudo antes de guardar.
                 </div>
                 {form.images.map((image, index) => (
                   <div
@@ -401,10 +395,10 @@ export default function ProductModal({ prod, onSave, onClose, color, currencyCod
                         />
                         <div style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
                           {/^(https?:\/\/|\/)/i.test(image)
-                            ? "Imagem com URL publica pronta para catalogo, cloud e mobile."
-                            : form.imageLinks[index]
-                              ? "Imagem vinda de link publico e partilhavel no pedido do WhatsApp."
-                              : "Imagem preparada localmente. Confirma o storage antes de publicar."}
+                            ? "Imagem com link público pronta para o catálogo e para a loja."
+                              : form.imageLinks[index]
+                              ? "Imagem vinda de link público e pronta para partilha no WhatsApp."
+                              : "Imagem preparada localmente. Confirma se ficou pronta antes de publicar."}
                         </div>
                       </div>
                     ) : (
@@ -416,26 +410,53 @@ export default function ProductModal({ prod, onSave, onClose, color, currencyCod
                 ))}
 
                 <div style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>
-                  O sistema aceita link publico ou foto do PC enviada para storage para mostrar varias partes do produto.
+                  O sistema aceita link público ou foto do PC para mostrar várias partes do produto.
                 </div>
+
+                {form.imagePrompt ? (
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "8px",
+                      padding: "12px",
+                      borderRadius: "var(--border-radius-lg)",
+                      border: "0.5px solid rgba(37,174,130,0.22)",
+                      background: "rgba(37,174,130,0.05)",
+                    }}
+                  >
+                    <div style={{ fontSize: "12px", fontWeight: "800", color: "var(--color-text-primary)" }}>
+                      Prompt recomendado para gerar a imagem real
+                    </div>
+                    <div style={{ fontSize: "12px", lineHeight: 1.65, color: "var(--color-text-secondary)" }}>
+                      {form.imagePrompt}
+                    </div>
+                    {form.imageGeneration ? (
+                      <div style={{ display: "grid", gap: "4px", fontSize: "11px", color: "var(--color-text-secondary)" }}>
+                        <div><strong style={{ color: "var(--color-text-primary)" }}>Formato:</strong> {form.imageGeneration.format}</div>
+                        <div><strong style={{ color: "var(--color-text-primary)" }}>Resolucao minima:</strong> {form.imageGeneration.minimumResolution}</div>
+                        <div><strong style={{ color: "var(--color-text-primary)" }}>Estilo:</strong> {form.imageGeneration.style}</div>
+                        <div><strong style={{ color: "var(--color-text-primary)" }}>Tom de pele / público:</strong> {form.imageGeneration.audienceSkinTone}</div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </FLabel>
 
             <div style={{ display: "grid", gap: "10px" }}>
-              <ToggleTile label="Produto disponivel" description="Desativa para esconder a compra sem apagar o item." checked={form.available} onChange={(checked) => setForm({ ...form, available: checked })} />
+              <ToggleTile label="Produto disponível" description="Desativa para esconder a compra sem apagar o item." checked={form.available} onChange={(checked) => setForm({ ...form, available: checked })} />
               <ToggleTile
-                label="Produto em promocao"
-                description="Mostra selo de promocao. Se quiseres, informa o preco antigo acima para exibir o desconto."
+                label="Produto em promoção"
+                description="Mostra selo de promocao. Se preencheres o preco antigo acima, o desconto tambem aparece automaticamente."
                 checked={form.onPromotion}
                 onChange={(checked) =>
                   setForm((current) => ({
                     ...current,
                     onPromotion: checked,
-                    compareAt: checked ? current.compareAt : "",
                   }))
                 }
               />
-              <ToggleTile label="Marcar como destaque" description="Aparece com selo especial e pode ser filtrado no catalogo." checked={form.featured} onChange={(checked) => setForm({ ...form, featured: checked })} />
+              <ToggleTile label="Marcar como destaque" description="Aparece com selo especial e pode ser filtrado no catálogo." checked={form.featured} onChange={(checked) => setForm({ ...form, featured: checked })} />
             </div>
           </CollapsiblePanel>
 

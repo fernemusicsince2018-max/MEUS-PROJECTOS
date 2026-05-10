@@ -5,6 +5,8 @@ import path from "node:path";
 export function runNetlifyConfigTests() {
   const netlifyTomlPath = path.resolve("netlify.toml");
   const netlifyToml = fs.readFileSync(netlifyTomlPath, "utf8");
+  const redirectsPath = path.resolve("public/_redirects");
+  const redirectsFile = fs.readFileSync(redirectsPath, "utf8");
 
   assert.match(
     netlifyToml,
@@ -19,5 +21,14 @@ export function runNetlifyConfigTests() {
   assert.ok(
     apiRedirectIndex < spaRedirectIndex,
     "O redirect /api/* precisa de vir antes do catch-all SPA.",
+  );
+
+  assert.match(
+    redirectsFile,
+    /^\/api\/\* \/\.netlify\/functions\/:splat 200/m,
+  );
+  assert.match(
+    redirectsFile,
+    /^\/\* \/index\.html 200/m,
   );
 }

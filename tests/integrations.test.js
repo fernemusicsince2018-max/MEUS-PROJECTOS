@@ -133,7 +133,7 @@ export async function runIntegrationTests() {
             ownerId: "store-demo",
             fileName: "produto.png",
           }),
-        /storage ainda nao esta configurado|SUPABASE_URL/i,
+        /servico de imagens ainda nao esta configurado|SUPABASE_URL/i,
       );
     },
   );

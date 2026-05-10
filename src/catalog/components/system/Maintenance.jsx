@@ -1,6 +1,6 @@
 export default function Maintenance({
-  title = "Catalogo em manutencao",
-  message = "O acesso publico aos catalogos foi pausado temporariamente pelo super admin. Tenta novamente daqui a pouco.",
+  title = "Catálogo em manutenção",
+  message = "O acesso público aos catálogos foi pausado temporariamente pelo super admin. Tenta novamente daqui a pouco.",
   symbol = "!",
 }) {
   return (

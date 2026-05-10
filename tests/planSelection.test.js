@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
-import { buildPlanActivationLink, calculatePlanTotalPrice, getMerchantPlanDurationOptions, isPaidMerchantPlan } from "../src/catalog/utils/catalog.js";
+import {
+  buildPlanActivationLink,
+  calculatePlanTotalPrice,
+  getMerchantPlanDurationOptions,
+  getPlanCountdown,
+  getPlanTimeRemaining,
+  isPaidMerchantPlan,
+  supportsPlanCountdown,
+} from "../src/catalog/utils/catalog.js";
 
 export async function runPlanSelectionTests() {
   assert.equal(calculatePlanTotalPrice(5000, 30), 5000);
@@ -20,6 +28,33 @@ export async function runPlanSelectionTests() {
   assert.deepEqual(
     getMerchantPlanDurationOptions({ code: "scale" }).map((option) => option.label),
     ["6 meses", "12 meses"],
+  );
+  assert.equal(supportsPlanCountdown("active"), true);
+  assert.equal(supportsPlanCountdown("trial"), true);
+  assert.equal(supportsPlanCountdown("past_due"), false);
+
+  const countdown = getPlanCountdown("active", "2026-05-10", new Date("2026-05-07T10:00:00Z"));
+  assert.deepEqual(
+    countdown,
+    {
+      daysRemaining: 3,
+      bg: "#fef3c7",
+      color: "#b45309",
+      borderColor: "#fde68a",
+      label: "3 dias restantes",
+    },
+  );
+
+  const timeRemaining = getPlanTimeRemaining("trial", "2026-05-10", new Date("2026-05-07T12:30:00+01:00"));
+  assert.deepEqual(
+    timeRemaining,
+    {
+      compactLabel: "3d 11h 30m",
+      detailLabel: "Faltam 3 dias, 11 horas e 30 minutos para o trial terminar.",
+      bg: "#fff7ed",
+      color: "#9a3412",
+      borderColor: "#fed7aa",
+    },
   );
 
   const link = buildPlanActivationLink({

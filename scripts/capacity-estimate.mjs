@@ -61,7 +61,7 @@ async function main() {
   const warningStores = Math.max(300, Math.floor(poolMax * 180 * poolerMultiplier));
 
   console.log("Estimativa heuristica de capacidade do catalogo");
-  console.log(`Pool PostgreSQL configurado: ${poolMax} ligacoes por instancia`);
+  console.log(`Pool da base de dados configurado: ${poolMax} ligacoes por instancia`);
   console.log(`Pooler ativo: ${usePooler ? "sim" : "nao"}`);
   console.log(`Cache publica do catalogo: ${publicCatalogCacheTtlMs > 0 ? `${publicCatalogCacheTtlMs} ms` : "desligada"}`);
   console.log(`Utilizadores atuais: ${counts.users_count}`);
@@ -77,7 +77,7 @@ async function main() {
   console.log("Alertas principais:");
   console.log("- O catalogo publico agora beneficia de cache em memoria por instancia, headers HTTP de cache e snapshots persistentes, por isso trafego repetido tende a sair mais barato do que trafego frio.");
   console.log("- A criacao de pedidos agora pode empurrar a notificacao WhatsApp para uma fila persistida, tirando a chamada externa do caminho critico.");
-  console.log("- A lista de encomendas do lojista continua paginada e o resumo global passou a usar estatisticas persistidas por loja, mantendo apenas a janela recente no PostgreSQL.");
+  console.log("- A lista de encomendas do lojista continua paginada e o resumo global passou a usar estatisticas persistidas por loja, mantendo apenas a janela recente na base de dados.");
   console.log("- O guardar do catalogo agora faz upsert em lote dos produtos, reduzindo bastante o custo por publicacao grande.");
   console.log("- Mesmo com estas melhorias, o ponto real de degradacao precisa de confirmacao em staging com a suite de carga.");
   console.log("- Se a meta for milhares de acessos simultaneos sustentados, combina pooler, cache publica curta, storage externo e load test regular.");

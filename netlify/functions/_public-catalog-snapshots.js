@@ -18,8 +18,22 @@ function compareText(left, right) {
   return cleanText(left).localeCompare(cleanText(right), "pt", { sensitivity: "base" });
 }
 
-function buildPublicCatalogStoreSnapshot(store = {}) {
+function serializePublicStoreReview(entry = {}) {
   return {
+    id: cleanText(entry?.id),
+    orderId: cleanText(entry?.orderId),
+    rating: Math.max(0, Math.min(5, Number(entry?.rating || 0))),
+    comment: cleanText(entry?.comment),
+    customerLabel: cleanText(entry?.customerLabel),
+    createdAt: entry?.createdAt || null,
+    updatedAt: entry?.updatedAt || null,
+    isFeatured: entry?.isFeatured === true,
+    featuredAt: entry?.featuredAt || null,
+  };
+}
+
+function buildPublicCatalogStoreSnapshot(store = {}) {
+  const snapshot = {
     name: cleanText(store.name),
     description: cleanText(store.description),
     whatsapp: cleanText(store.whatsapp),
@@ -32,6 +46,42 @@ function buildPublicCatalogStoreSnapshot(store = {}) {
     publicSlug: cleanText(store.publicSlug),
     customDomain: cleanText(store.customDomain),
   };
+
+  if (store.reviewSummary && typeof store.reviewSummary === "object") {
+    snapshot.reviewSummary = {
+      averageRating: toMoney(store.reviewSummary.averageRating),
+      totalReviews: Math.max(0, Number(store.reviewSummary.totalReviews || 0)),
+      testimonialCount: Math.max(0, Number(store.reviewSummary.testimonialCount || 0)),
+      featuredCount: Math.max(0, Number(store.reviewSummary.featuredCount || 0)),
+      distribution: {
+        1: Math.max(0, Number(store.reviewSummary.distribution?.[1] || 0)),
+        2: Math.max(0, Number(store.reviewSummary.distribution?.[2] || 0)),
+        3: Math.max(0, Number(store.reviewSummary.distribution?.[3] || 0)),
+        4: Math.max(0, Number(store.reviewSummary.distribution?.[4] || 0)),
+        5: Math.max(0, Number(store.reviewSummary.distribution?.[5] || 0)),
+      },
+    };
+  }
+
+  if (Array.isArray(store.testimonials)) {
+    snapshot.testimonials = store.testimonials
+      .map(serializePublicStoreReview)
+      .filter((entry) => entry.id && entry.rating > 0 && entry.comment);
+  }
+
+  if (Array.isArray(store.featuredTestimonials)) {
+    snapshot.featuredTestimonials = store.featuredTestimonials
+      .map(serializePublicStoreReview)
+      .filter((entry) => entry.id && entry.rating > 0 && entry.comment);
+  }
+
+  if (Array.isArray(store.recentTestimonials)) {
+    snapshot.recentTestimonials = store.recentTestimonials
+      .map(serializePublicStoreReview)
+      .filter((entry) => entry.id && entry.rating > 0 && entry.comment);
+  }
+
+  return snapshot;
 }
 
 function buildPublicCatalogProductSnapshot(product = {}) {

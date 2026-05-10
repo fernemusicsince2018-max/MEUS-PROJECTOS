@@ -25,7 +25,7 @@ export default async function notificationsDispatchScheduled(request) {
 
   if (!dispatchSecret) {
     throw new Error(
-      "NOTIFICATION_DISPATCH_SECRET precisa de estar configurado para o agendamento do dispatcher.",
+      "NOTIFICATION_DISPATCH_SECRET precisa de estar configurado para o agendamento do envio automatico.",
     );
   }
 
@@ -51,7 +51,7 @@ export default async function notificationsDispatchScheduled(request) {
   if ((result?.statusCode || 500) >= 400) {
     throw new Error(
       responsePayload?.error
-      || `Falha no dispatcher agendado com status ${result?.statusCode || 500}.`,
+      || `Falha no envio automatico agendado com status ${result?.statusCode || 500}.`,
     );
   }
 

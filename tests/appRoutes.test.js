@@ -12,7 +12,7 @@ import {
 export function runAppRoutesTests() {
   assert.equal(buildRootPath(), "/");
   assert.equal(buildAuthPath(), "/auth");
-  assert.equal(buildMerchantAppPath(), "/app");
+  assert.equal(buildMerchantAppPath(), "/painel");
   assert.equal(buildSuperAdminPath(), "/superadmin");
   assert.equal(buildPublicCatalogPath("loja-demo"), "/catalog/loja-demo");
   assert.equal(buildTrackingPath("trk-123"), "/tracking/trk-123");
@@ -27,9 +27,9 @@ export function runAppRoutesTests() {
     canonicalPath: "/auth",
   });
 
-  assert.deepEqual(readAppRoute({ pathname: "/app", search: "", hash: "" }), {
+  assert.deepEqual(readAppRoute({ pathname: "/painel", search: "", hash: "" }), {
     kind: "merchantApp",
-    canonicalPath: "/app",
+    canonicalPath: "/painel",
   });
 
   assert.deepEqual(readAppRoute({ pathname: "/superadmin", search: "", hash: "" }), {
@@ -41,7 +41,6 @@ export function runAppRoutesTests() {
     kind: "publicCatalog",
     storeId: "loja-demo",
     preview: false,
-    fromLegacyHash: false,
     canonicalPath: "/catalog/loja-demo",
   });
 
@@ -51,7 +50,6 @@ export function runAppRoutesTests() {
       kind: "publicCatalog",
       storeId: "loja-demo",
       preview: true,
-      fromLegacyHash: false,
       canonicalPath: "/catalog/loja-demo?preview=1",
     },
   );
@@ -59,16 +57,7 @@ export function runAppRoutesTests() {
   assert.deepEqual(readAppRoute({ pathname: "/tracking/trk-123", search: "", hash: "" }), {
     kind: "tracking",
     token: "trk-123",
-    fromLegacyHash: false,
     canonicalPath: "/tracking/trk-123",
-  });
-
-  assert.deepEqual(readAppRoute({ pathname: "/", search: "", hash: "#v:loja-demo" }), {
-    kind: "publicCatalog",
-    storeId: "loja-demo",
-    preview: false,
-    fromLegacyHash: true,
-    canonicalPath: "/catalog/loja-demo",
   });
 
   assert.deepEqual(readAppRoute({ pathname: "/rota-inexistente", search: "", hash: "" }), {

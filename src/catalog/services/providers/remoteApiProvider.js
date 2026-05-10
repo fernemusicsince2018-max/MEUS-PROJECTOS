@@ -1,4 +1,4 @@
-import { readProviderCache, writeProviderCache } from "../../utils/providerCache.js";
+import { deleteProviderCache, readProviderCache, writeProviderCache } from "../../utils/providerCache.js";
 
 const PUBLIC_CACHE_PREFIX = "cat:cache:public:";
 const ADMIN_CACHE_PREFIX = "cat:cache:admin:";
@@ -53,6 +53,8 @@ export function createRemoteApiProvider(config, fallbackProvider) {
       if (!base || key === "cat:aid") return fallbackProvider.get(key);
 
       const catalogId = extractCatalogId(key);
+      const publicCacheKey = buildPublicCacheKey(catalogId);
+      await deleteProviderCache(fallbackProvider, publicCacheKey);
       let response;
 
       try {
@@ -60,8 +62,6 @@ export function createRemoteApiProvider(config, fallbackProvider) {
           credentials: requestCredentials,
         });
       } catch (error) {
-        const cached = await readCachedCatalogSnapshot(fallbackProvider, buildPublicCacheKey(catalogId));
-        if (cached) return cached;
         throw error;
       }
 
@@ -75,15 +75,10 @@ export function createRemoteApiProvider(config, fallbackProvider) {
         s: data.store || {},
         p: data.products || [],
       });
-      const syncedAt = await writeCachedCatalogSnapshot(
-        fallbackProvider,
-        buildPublicCacheKey(catalogId),
-        value,
-      );
 
       return {
         value,
-        syncedAt,
+        syncedAt: new Date().toISOString(),
       };
     },
     async getAdmin(key) {

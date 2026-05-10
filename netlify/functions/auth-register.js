@@ -166,6 +166,12 @@ async function handle(event) {
               approvalLink,
             });
           } catch (error) {
+            console.error("auth-register: failed to send registration approval email", {
+              email,
+              storeName: normalizedStoreName,
+              message: error?.message || String(error),
+            });
+
             if (!shouldExposeResetCode()) {
               await pool.query(
                 `delete from ${PENDING_STORE_REGISTRATION_TABLE}

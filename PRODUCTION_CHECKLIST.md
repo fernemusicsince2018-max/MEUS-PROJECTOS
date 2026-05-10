@@ -57,10 +57,13 @@ Variaveis correspondentes:
 
 - Partir de `.env.staging.example` ou `.env.production.example` em vez de preencher as envs criticas do zero
 - Se a base for Supabase, carregar `backend/postgresql/schema.sql` e depois aplicar as migrations em `backend/postgresql/migrations/`
-- Se a base for Supabase, usar o pooler em `POSTGRES_POOLER_URL` e nao o ficheiro legado `backend/supabase/schema.sql`
+- Se a base for Supabase, usar o pooler em `POSTGRES_POOLER_URL`
 - Confirmar dominio publico e `APP_BASE_URL`
 - Confirmar variaveis no hosting web e na API
 - Confirmar que a Netlify esta a reencaminhar `/api/*` para `/.netlify/functions/:splat`
+- Confirmar que o deploy publicado inclui `frontend + Netlify Functions` no mesmo release
+- Se usares Netlify, evitar publicar apenas `dist` por drag-and-drop quando o produto depende de `/api/*`
+- Confirmar que `Functions` na Netlify lista `auth-register`, `auth-register-availability` e `auth-register-approve`
 - Se o alvo for staging/previews serverless, confirmar `POSTGRES_POOLER_URL` e `POSTGRES_USE_POOLER=true`
 - Se o alvo incluir app movel, confirmar `VITE_NATIVE_CATALOG_API_BASE`, `CORS_ALLOWED_ORIGINS`, `SESSION_COOKIE_SAME_SITE=None` e `SESSION_COOKIE_SECURE=true`
 - Se o alvo incluir app movel, correr o fluxo de `NATIVE_LOGIN_SESSION_CHECKLIST.md`
@@ -70,6 +73,7 @@ Variaveis correspondentes:
 - Correr `npm run loadtest:staging:matrix -- --seedProductCount=300 --prefillOrders=1000 --scenarios=all` no staging quando o objetivo for validar carga
 - Para validar escala por alvo, correr `npm run loadtest:staging:targets` e rever os relatorios de `1000`, `5000` e `10000` concorrentes
 - Fazer smoke test manual no ambiente publicado
+- Fazer smoke HTTP em `POST /api/auth-register-availability` e confirmar `200` com JSON, nunca `404` HTML da Netlify
 
 ## 5. Fluxo de planos pagos
 

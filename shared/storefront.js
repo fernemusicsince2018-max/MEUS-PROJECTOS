@@ -81,6 +81,33 @@ export function normalizeHostname(value) {
   }
 }
 
+export function isLocalNetworkHostname(value) {
+  const hostname = normalizeHostname(value);
+  if (!hostname) return false;
+
+  if (
+    hostname === "localhost"
+    || hostname === "127.0.0.1"
+    || hostname === "[::1]"
+    || hostname.endsWith(".local")
+  ) {
+    return true;
+  }
+
+  const octets = hostname.split(".").map((segment) => Number(segment));
+  if (octets.length !== 4) return false;
+  if (octets.some((segment) => Number.isNaN(segment) || segment < 0 || segment > 255)) {
+    return false;
+  }
+
+  if (octets[0] === 10 || octets[0] === 127) return true;
+  if (octets[0] === 192 && octets[1] === 168) return true;
+  if (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) return true;
+  if (octets[0] === 169 && octets[1] === 254) return true;
+
+  return false;
+}
+
 export function validateCustomDomain(value, label = "O dominio publico") {
   const normalized = normalizeHostname(value);
   if (!normalized) {
@@ -132,6 +159,34 @@ function normalizeBaseUrl(value) {
   } catch (error) {
     return "";
   }
+}
+
+export function shouldPreferCurrentOriginForPublicLinks(currentOrigin = "", options = {}) {
+  const currentHost = normalizeHostname(currentOrigin);
+  if (!currentHost) return false;
+
+  const publicBaseHost = normalizeHostname(
+    options.publicCatalogBaseUrl || options.publicCatalogBaseDomain || "",
+  );
+  if (
+    publicBaseHost
+    && (currentHost === publicBaseHost || currentHost.endsWith(`.${publicBaseHost}`))
+  ) {
+    return false;
+  }
+
+  if (isLocalNetworkHostname(currentHost)) {
+    return true;
+  }
+
+  try {
+    const protocol = new URL(cleanText(currentOrigin)).protocol.replace(/:$/, "").toLowerCase();
+    if (protocol === "http" && publicBaseHost && currentHost !== publicBaseHost) {
+      return true;
+    }
+  } catch (error) {}
+
+  return false;
 }
 
 export function buildStorefrontCatalogUrl(storeId, store = {}, options = {}) {

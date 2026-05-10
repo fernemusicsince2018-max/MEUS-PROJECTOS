@@ -1,5 +1,9 @@
 import { buildAbsoluteAppUrl, buildTrackingPath } from "./appRoutes.js";
 import { getCanonicalCountry, getCountryRegionLabel } from "./countryRegions.js";
+import {
+  getOrderReviewEligibility,
+  isOrderReviewEligible,
+} from "../../../shared/orderReviewEligibility.js";
 
 export const ORDER_STATUS_FLOW = ["pending", "in_progress", "on_the_way", "delivered"];
 export const ORDER_STATUS_OPTIONS = [
@@ -471,3 +475,5 @@ export function getOrderStatusTimingMeta(order, status, referenceTime = Date.now
 export function getOrderCurrentStatusTiming(order, referenceTime = Date.now()) {
   return getOrderStatusTimingMeta(order, order?.status, referenceTime);
 }
+
+export { getOrderReviewEligibility, isOrderReviewEligible };

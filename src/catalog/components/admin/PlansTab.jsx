@@ -5,6 +5,8 @@ import {
   calculatePlanTotalPrice,
   getMerchantPlanDurationOptions,
   getPlanAccessState,
+  getPlanCountdown,
+  getPlanTimeRemaining,
   isPaidMerchantPlan,
 } from "../../utils/catalog.js";
 import { fmtMoney } from "../../utils/format.js";
@@ -79,6 +81,7 @@ export default function PlansTab({
   const [durationByPlanId, setDurationByPlanId] = React.useState({});
   const [requestingPlanId, setRequestingPlanId] = React.useState("");
   const [paymentRequest, setPaymentRequest] = React.useState(null);
+  const planListRef = React.useRef(null);
 
   const plans = Array.isArray(planCatalog?.plans) ? planCatalog.plans : [];
   const availablePlans = plans.filter(isPaidMerchantPlan);
@@ -95,9 +98,28 @@ export default function PlansTab({
   const productCount = Number(catalogStore.productCount ?? 0);
   const maxFreeProducts = Number(catalogStore.maxFreeProducts ?? store?.maxFreeProducts ?? 0);
   const planAccess = getPlanAccessState(currentPlanStatus, currentPlanExpiresAt);
+  const [countdownNow, setCountdownNow] = React.useState(() => Date.now());
   const referenceId = catalogStore.referenceId || session?.referenceId || "";
   const storeId = catalogStore.id || session?.storeId || "";
   const storeName = store?.name || catalogStore.name || session?.storeName || "Minha Loja";
+  const hasActiveRequest = Boolean(activeRequest?.id || activeRequest?.status);
+  const planCountdown = getPlanCountdown(currentPlanStatus, currentPlanExpiresAt, new Date(countdownNow));
+  const planTimeRemaining = getPlanTimeRemaining(currentPlanStatus, currentPlanExpiresAt, countdownNow);
+  const planHeroTheme = planAccess.allowed
+    ? {
+      background: "linear-gradient(135deg, rgba(12, 37, 34, 0.96) 0%, rgba(28, 154, 116, 0.96) 62%, rgba(240, 201, 120, 0.95) 180%)",
+      glow: "rgba(28, 154, 116, 0.2)",
+      accentBubble: "rgba(255,255,255,0.08)",
+      cardBackground: "rgba(255,255,255,0.12)",
+      buttonText: "#0f172a",
+    }
+    : {
+      background: "linear-gradient(135deg, rgba(69, 10, 10, 0.99) 0%, rgba(127, 29, 29, 0.98) 58%, rgba(185, 28, 28, 0.94) 100%)",
+      glow: "rgba(127, 29, 29, 0.24)",
+      accentBubble: "rgba(254,226,226,0.12)",
+      cardBackground: "rgba(255,255,255,0.14)",
+      buttonText: "#7f1d1d",
+    };
 
   React.useEffect(() => {
     setDurationByPlanId((current) => {
@@ -126,6 +148,18 @@ export default function PlansTab({
     });
   }, [activeRequest]);
 
+  React.useEffect(() => {
+    if (!currentPlanExpiresAt) return undefined;
+
+    const timer = window.setInterval(() => {
+      setCountdownNow(Date.now());
+    }, 60 * 1000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [currentPlanExpiresAt, currentPlanStatus]);
+
   function handleDurationChange(planId, value) {
     setDurationByPlanId((current) => ({
       ...current,
@@ -152,11 +186,15 @@ export default function PlansTab({
     }
   }
 
+  function scrollToPlans() {
+    planListRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   const headerCopy = activeRequest
     ? "Ja existe um pedido de plano em aberto. Continua pelo painel de pagamento, envia o comprovativo oficial e usa o WhatsApp apenas como apoio."
     : planAccess.allowed
       ? "Escolhe um plano antes de o trial terminar, gera a referencia de pagamento e envia o comprovativo oficial pelo painel."
-      : "O teu catalogo ja precisa de um plano comercial. Escolhe abaixo, paga com a referencia indicada e anexa o comprovativo no painel.";
+      : "O teu catálogo já precisa de um plano comercial. Escolhe abaixo, paga com a referência indicada e anexa o comprovativo no painel.";
 
   const activeRequestStatusTone = activeRequest ? getPlanRequestStatusTone(activeRequest.status) : null;
   const activeProofStatusTone = activeRequest ? getPaymentProofStatusTone(activeRequest.paymentProofStatus) : null;
@@ -168,13 +206,14 @@ export default function PlansTab({
           style={{
             ...SURFACE_STYLE,
             padding: "22px",
-            background: "linear-gradient(135deg, rgba(12, 37, 34, 0.96) 0%, rgba(28, 154, 116, 0.96) 62%, rgba(240, 201, 120, 0.95) 180%)",
+            background: planHeroTheme.background,
             color: "white",
             overflow: "hidden",
             position: "relative",
+            boxShadow: `0 24px 56px ${planHeroTheme.glow}`,
           }}
         >
-          <div style={{ position: "absolute", width: "200px", height: "200px", borderRadius: "999px", background: "rgba(255,255,255,0.08)", top: "-96px", right: "-42px" }} />
+          <div style={{ position: "absolute", width: "200px", height: "200px", borderRadius: "999px", background: planHeroTheme.accentBubble, top: "-96px", right: "-42px" }} />
           <div style={{ position: "relative", display: "grid", gap: "16px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
               <Badge bg="rgba(255,255,255,0.16)" color="white" borderColor="rgba(255,255,255,0.14)">
@@ -183,6 +222,16 @@ export default function PlansTab({
               <Badge bg={planAccess.allowed ? "rgba(220,252,231,0.16)" : "rgba(254,226,226,0.16)"} color="white" borderColor="rgba(255,255,255,0.14)">
                 <ShieldCheck size={12} /> {getCurrentPlanLabel(currentPlanStatus, currentPlanExpiresAt)}
               </Badge>
+              {!planAccess.allowed ? (
+                <Badge bg="rgba(254,226,226,0.16)" color="white" borderColor="rgba(255,255,255,0.14)">
+                  <AlertCircle size={12} /> Loja inativa ate a reativacao
+                </Badge>
+              ) : null}
+              {planTimeRemaining ? (
+                <Badge bg="rgba(255,255,255,0.16)" color="white" borderColor="rgba(255,255,255,0.14)">
+                  <Clock3 size={12} /> {planTimeRemaining.compactLabel}
+                </Badge>
+              ) : null}
               {activeRequestStatusTone ? (
                 <Badge bg="rgba(255,255,255,0.16)" color="white" borderColor="rgba(255,255,255,0.14)">
                   <Receipt size={12} /> Pedido em andamento
@@ -192,21 +241,39 @@ export default function PlansTab({
 
             <div style={{ display: "grid", gap: "8px", maxWidth: "760px" }}>
               <div style={{ fontSize: "30px", fontWeight: "800", lineHeight: 1.05, fontFamily: "var(--font-display)" }}>
-                Ativa o plano certo e envia o comprovativo sem sair do teu painel.
+                {planAccess.allowed
+                  ? "Ativa o plano certo e envia o comprovativo sem sair do teu painel."
+                  : "A tua loja esta inativa. Reativa o plano e volta a abrir para clientes."}
               </div>
               <div style={{ fontSize: "13px", opacity: 0.92, maxWidth: "640px" }}>
                 {headerCopy}
               </div>
+              {planTimeRemaining?.detailLabel ? (
+                <div style={{ fontSize: "12px", lineHeight: 1.7, color: "rgba(255,255,255,0.84)" }}>
+                  {planTimeRemaining.detailLabel}
+                </div>
+              ) : null}
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "4px" }}>
+                {hasActiveRequest ? (
+                  <button type="button" onClick={() => setPaymentRequest(activeRequest)} style={{ border: "none", borderRadius: "14px", padding: "11px 15px", background: "white", color: planHeroTheme.buttonText, cursor: "pointer", fontWeight: "800", display: "inline-flex", alignItems: "center", gap: "8px", boxShadow: "0 16px 34px rgba(0,0,0,0.16)" }}>
+                    <Receipt size={14} /> Continuar ativacao
+                  </button>
+                ) : availablePlans.length ? (
+                  <button type="button" onClick={scrollToPlans} style={{ border: "none", borderRadius: "14px", padding: "11px 15px", background: "white", color: planHeroTheme.buttonText, cursor: "pointer", fontWeight: "800", display: "inline-flex", alignItems: "center", gap: "8px", boxShadow: "0 16px 34px rgba(0,0,0,0.16)" }}>
+                    <Wallet size={14} /> Sinalizar ativacao do plano
+                  </button>
+                ) : null}
+              </div>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
-              <div style={{ padding: "14px 16px", borderRadius: "20px", background: "rgba(255,255,255,0.12)" }}>
+              <div style={{ padding: "14px 16px", borderRadius: "20px", background: planHeroTheme.cardBackground }}>
                 <div style={{ fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.8 }}>Loja</div>
                 <div style={{ marginTop: "6px", fontSize: "17px", fontWeight: "800", fontFamily: "var(--font-display)" }}>{storeName}</div>
                 <div style={{ marginTop: "4px", fontSize: "12px", opacity: 0.88 }}>ID {referenceId || String(storeId).slice(0, 8).toUpperCase()}</div>
               </div>
 
-              <div style={{ padding: "14px 16px", borderRadius: "20px", background: "rgba(255,255,255,0.12)" }}>
+              <div style={{ padding: "14px 16px", borderRadius: "20px", background: planHeroTheme.cardBackground }}>
                 <div style={{ fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.8 }}>Catalogo atual</div>
                 <div style={{ marginTop: "6px", fontSize: "17px", fontWeight: "800", fontFamily: "var(--font-display)" }}>{productCount} produto{productCount === 1 ? "" : "s"}</div>
                 <div style={{ marginTop: "4px", fontSize: "12px", opacity: 0.88 }}>
@@ -214,13 +281,17 @@ export default function PlansTab({
                 </div>
               </div>
 
-              <div style={{ padding: "14px 16px", borderRadius: "20px", background: "rgba(255,255,255,0.12)" }}>
-                <div style={{ fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.8 }}>Plano atual</div>
+              <div style={{ padding: "14px 16px", borderRadius: "20px", background: planHeroTheme.cardBackground }}>
+                <div style={{ fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.8 }}>
+                  {planTimeRemaining ? "Tempo restante" : "Plano atual"}
+                </div>
                 <div style={{ marginTop: "6px", fontSize: "17px", fontWeight: "800", fontFamily: "var(--font-display)" }}>
-                  {currentPlanTotalPrice > 0 ? fmtMoney(currentPlanTotalPrice, currentPlanCurrencyCode) : "Sem custo ativo"}
+                  {planTimeRemaining?.compactLabel || (currentPlanTotalPrice > 0 ? fmtMoney(currentPlanTotalPrice, currentPlanCurrencyCode) : "Sem custo ativo")}
                 </div>
                 <div style={{ marginTop: "4px", fontSize: "12px", opacity: 0.88 }}>
-                  {currentPlanDurationDays > 0 ? `${currentPlanDurationDays} dias configurados` : "Pronto para nova ativacao"}
+                  {planTimeRemaining?.detailLabel
+                    || planCountdown?.label
+                    || (currentPlanDurationDays > 0 ? `${currentPlanDurationDays} dias configurados` : "Pronto para nova ativacao")}
                 </div>
               </div>
             </div>
@@ -307,7 +378,7 @@ export default function PlansTab({
         ) : null}
 
         {availablePlans.length ? (
-          <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px" }}>
+          <section ref={planListRef} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px" }}>
             {availablePlans.map((plan) => {
               const durationOptions = getMerchantPlanDurationOptions(plan);
               const durationDays = Number(durationByPlanId[plan.id] || durationOptions[0]?.value || 30);
@@ -339,7 +410,7 @@ export default function PlansTab({
                     </div>
 
                     <div style={{ fontSize: "13px", color: "var(--color-text-secondary)", minHeight: "38px" }}>
-                      {plan.description || "Plano comercial pronto para ativar a vitrine, manter produtos e desbloquear a operacao da loja."}
+                      {plan.description || "Plano comercial pronto para ativar a vitrine, manter produtos e desbloquear a operação da loja."}
                     </div>
                   </div>
 
@@ -397,17 +468,17 @@ export default function PlansTab({
                         opacity: isRequestingThisPlan ? 0.8 : 1,
                       }}
                     >
-                      <Receipt size={16} /> {isRequestingThisPlan ? "A abrir pagamento..." : "Escolher e gerar pagamento"} <ArrowRight size={14} />
+                      <Receipt size={16} /> {isRequestingThisPlan ? "A abrir pagamento..." : "Sinalizar ativacao e gerar pagamento"} <ArrowRight size={14} />
                     </button>
 
                     <div style={{ fontSize: "12px", color: "var(--color-text-secondary)", display: "flex", alignItems: "center", gap: "8px" }}>
                       <Clock3 size={14} />
-                      O sistema cria o pedido, mostra a referencia do pagamento e recebe o comprovativo antes da revisao.
+                      O sistema cria o pedido, mostra a referência do pagamento e recebe o comprovativo antes da revisão.
                     </div>
 
                     {!coversCurrentCatalog ? (
                       <div style={{ fontSize: "12px", color: "#9a3412", background: "#fff7ed", borderRadius: "12px", padding: "10px 12px" }}>
-                        Este plano pode ficar curto para os {productCount} produtos que ja tens no catalogo.
+                        Este plano pode ficar curto para os {productCount} produtos que já tens no catálogo.
                       </div>
                     ) : null}
                   </div>

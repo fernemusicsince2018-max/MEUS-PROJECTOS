@@ -1,4 +1,4 @@
-const CACHE_NAME = "catalog-shell-v3";
+const CACHE_NAME = "catalog-shell-v5";
 
 function getBasePath() {
   const scopePath = self.registration?.scope ? new URL(self.registration.scope).pathname : "/";

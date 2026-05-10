@@ -39,9 +39,9 @@ export function syncAppHead({
 }) {
   if (typeof document === "undefined") return;
 
-  const safeTitle = String(title || appTitle || "Catalogo");
+  const safeTitle = String(title || appTitle || "KASTROZAPP | Sua loja pronta para vender no WhatsApp");
   const safeDescription = String(
-    description || "Sua loja no WhatsApp com catalogo digital, pedidos e painel do lojista.",
+    description || "Sua loja pronta para vender no WhatsApp com catalogo online e painel mobile.",
   );
   const safeAppTitle = String(appTitle || safeTitle).slice(0, 60);
 

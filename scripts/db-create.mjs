@@ -27,7 +27,7 @@ function buildAdminConfig() {
 }
 
 async function main() {
-  const databaseName = process.env.POSTGRES_DATABASE || "ferna_catalogo";
+  const databaseName = process.env.POSTGRES_DATABASE || "kastrozap";
   const client = new Client(buildAdminConfig());
 
   await client.connect();
@@ -48,7 +48,7 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error("Falha ao criar a base PostgreSQL.");
+  console.error("Falha ao criar a base de dados.");
   console.error(error.message || error);
   process.exitCode = 1;
 });

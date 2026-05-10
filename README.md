@@ -1,6 +1,6 @@
 # KASTROZAPP
 
-Sua loja no WhatsApp com catalogo digital e painel simples de administracao.
+Sua loja pronta para vender no WhatsApp com catalogo online e painel mobile.
 
 O projeto usa:
 
@@ -24,7 +24,7 @@ O projeto usa:
 - `/catalog/:storeId`: vitrine web da loja para clientes
 - `/tracking/:token`: acompanhamento publico de pedido
 - `/auth`: autenticacao do lojista
-- `/app`: painel/app do lojista
+- `/painel`: painel/app do lojista
 - `/superadmin`: area protegida da plataforma
 
 ## Storefront por loja
@@ -62,7 +62,7 @@ Se a loja tiver `customDomain`, o link publico passa a preferir:
 Para validar a separacao dos canais no browser:
 
 - abre `/` para a entrada publica
-- abre `/auth` ou `/app` para o fluxo do lojista
+- abre `/auth` ou `/painel` para o fluxo do lojista
 - abre `/catalog/<storeId>` para a vitrine publica da loja
 
 Se `VITE_CATALOG_API_BASE` nao estiver configurado, a app so aceita fallback local em ambiente de desenvolvimento (`localhost`) ou quando `VITE_ALLOW_LOCAL_FALLBACK=true`.
@@ -83,7 +83,7 @@ npm run build
 npm start
 ```
 
-Isto garante refresh direto em rotas como `/`, `/app`, `/catalog/:storeId` e `/tracking/:token` sem depender de rewrites externos.
+Isto garante refresh direto em rotas como `/`, `/painel`, `/catalog/:storeId` e `/tracking/:token` sem depender de rewrites externos.
 
 ## Configuracao PostgreSQL
 
@@ -115,7 +115,7 @@ VITE_PUBLIC_CATALOG_BASE_URL=https://teu-dominio.com
 VITE_PUBLIC_CATALOG_BASE_DOMAIN=teu-dominio.com
 POSTGRES_HOST=127.0.0.1
 POSTGRES_PORT=5432
-POSTGRES_DATABASE=ferna_catalogo
+POSTGRES_DATABASE=kastrozap
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=your-password
 POSTGRES_SSL=false
@@ -189,19 +189,24 @@ WHATSAPP_CLOUD_API_VERSION=v23.0
 WHATSAPP_CLOUD_TEMPLATE_LANGUAGE=pt_PT
 WHATSAPP_CLOUD_ORDER_SUMMARY_TEMPLATE_NAME=catalog_order_summary_v1
 WHATSAPP_CLOUD_ORDER_ITEM_TEMPLATE_NAME=catalog_order_item_image_v1
+WHATSAPP_CLOUD_PLAN_ACTIVATION_TEMPLATE_NAME=catalog_plan_activation_v1
 ```
 
 Notas:
 
 - Com `WHATSAPP_CLOUD_API_TOKEN` e `WHATSAPP_CLOUD_PHONE_NUMBER_ID`, o backend tenta enviar o resumo do pedido e as imagens dos produtos pelo numero oficial do WhatsApp Business.
 - Se os nomes dos templates ficarem vazios, o sistema tenta enviar mensagens livres com media. Isto costuma exigir uma janela ativa de 24 horas entre o numero oficial e o lojista.
+- Para notificacoes de ativacao de plano, podes definir `WHATSAPP_CLOUD_PLAN_ACTIVATION_TEMPLATE_NAME`; se esse valor ficar vazio, o sistema tenta fallback para mensagem livre.
 - Para um fluxo estavel em producao, o ideal e criares templates no WhatsApp Manager:
   `catalog_order_summary_v1`: template de resumo do pedido.
   `catalog_order_item_image_v1`: template com cabecalho de imagem para cada item.
+  `catalog_plan_activation_v1`: template de confirmacao de ativacao do plano.
 - O template por item deve esperar, pela ordem, estes parametros no corpo:
   `codigo do pedido`, `nome do produto`, `quantidade`, `preco unitario`, `subtotal`.
 - O template de resumo deve esperar, pela ordem, estes parametros no corpo:
   `codigo do pedido`, `nome da loja`, `nome do cliente`, `tipo de recebimento`, `localidade`, `total`, `link de acompanhamento`.
+- O template de ativacao do plano deve esperar, pela ordem, estes parametros no corpo:
+  `nome da loja`, `nome do plano`, `data de validade`, `valor`.
 - No painel da loja, o campo de WhatsApp agora aceita tanto numero como link direto `wa.me` ou `api.whatsapp.com/send?phone=...`. O sistema extrai o numero e continua a direcionar os pedidos para a loja certa.
 - Para copiar os comandos prontos no terminal, consulta [WHATSAPP_TEMPLATE_CURLS.md](./WHATSAPP_TEMPLATE_CURLS.md).
 
@@ -233,13 +238,12 @@ Notas:
 
 Importante:
 
-- nao uses `backend/supabase/schema.sql` para provisionar a base actual; esse ficheiro ficou apenas como guardrail para evitar um setup incompleto
 - para Netlify + Supabase, o schema correcto e o de `backend/postgresql`
 
 #### No pgAdmin
 
 1. Abre o `pgAdmin`.
-2. Cria uma database chamada `ferna_catalogo`.
+2. Cria uma database chamada `kastrozap`.
 3. Abre o Query Tool dessa database.
 4. Executa o ficheiro `backend/postgresql/schema.sql`.
 
@@ -394,11 +398,7 @@ Podes ajustar:
 Tambem podes passar estes valores por variaveis `VITE_BRAND_*`.
 O default atual do projeto e `KASTROZAPP`.
 
-## Roadmap Mobile
-
-Se quiseres evoluir o produto para `web + app` sem duplicar a codebase, consulta:
-
-- [MOBILE_ROADMAP_3_PHASES.md](./MOBILE_ROADMAP_3_PHASES.md)
+## Base Mobile
 
 Base nativa atual:
 
@@ -407,6 +407,11 @@ Base nativa atual:
 - sincronizacao do build web para Android com `npm run native:sync`
 - abertura do projeto Android Studio com `npm run native:android`
 
+Guias atuais:
+
+- [PLAYSTORE_RELEASE_CHECKLIST.md](./PLAYSTORE_RELEASE_CHECKLIST.md)
+- [NATIVE_LOGIN_SESSION_CHECKLIST.md](./NATIVE_LOGIN_SESSION_CHECKLIST.md)
+
 Nota:
 
 - o Android ja ficou scaffoldado no repositorio
@@ -414,15 +419,13 @@ Nota:
 
 ## Rotas principais
 
-A base da Fase 1 ja suporta URLs web reais com fallback para os hashes antigos:
+A base da Fase 1 ja suporta URLs web reais:
 
 - `/auth`
-- `/app`
+- `/painel`
 - `/superadmin`
 - `/catalog/:storeId`
 - `/tracking/:token`
-
-Os links antigos em hash (`#v:...` e `#o:...`) continuam a abrir e sao convertidos para as rotas novas.
 
 ## Base PWA
 
@@ -474,13 +477,13 @@ Se a release incluir Android/iPhone, corre tambem o fluxo de [NATIVE_LOGIN_SESSI
 O `server.js` agora serve:
 
 - a entrada publica em `/`
-- a SPA do lojista em `/app`, `/auth` e `/superadmin`
+- a SPA do lojista em `/painel`, `/auth` e `/superadmin`
 - os catalogos e tracking em `/catalog/:storeId` e `/tracking/:token`
 - a API em `/api`
 
 Isto funciona em alojamento Node tradicional, incluindo cPanel/Node App ou VPS, sem depender de rewrites externos para refresh das rotas SPA.
 
-O ficheiro `server.js` expõe a API em `/api` para alojamento Node tradicional, incluindo cPanel/Node App ou VPS. O nome foi ajustado para evitar conflito com a rota SPA `/app` durante o desenvolvimento local com Vite.
+O ficheiro `server.js` expõe a API em `/api` para alojamento Node tradicional, incluindo cPanel/Node App ou VPS.
 Se quiseres uma lista curta do que falta para cobertura completa de producao, consulta [PRODUCTION_CHECKLIST.md](./PRODUCTION_CHECKLIST.md).
 Se fores publicar na DigitalOcean, usa [DIGITALOCEAN_DEPLOY.md](./DIGITALOCEAN_DEPLOY.md) e o app spec exemplo [.do/app-platform.example.yaml](./.do/app-platform.example.yaml).
 Se ainda fores usar Netlify noutro ambiente, o projeto continua com compatibilidade legada em `/.netlify/functions`.
@@ -492,5 +495,4 @@ Pipeline inicial de release cliente:
 
 ## Ponto de entrada
 
-`CatalogApp.jsx` na raiz foi mantido como ponte.
 A app modular real esta em `src/catalog/CatalogApp.jsx`.

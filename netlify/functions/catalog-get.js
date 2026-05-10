@@ -12,6 +12,7 @@ import {
 } from "./_public-catalog-snapshots.js";
 import { ensureDatabaseReady, getPool, jsonResponse, mapProduct, mapStore, withCors } from "./_postgres.js";
 import { getSystemSettings } from "./_settings.js";
+import { attachPublicStoreReviews } from "./_store-reviews.js";
 
 async function handle(event) {
   try {
@@ -25,15 +26,6 @@ async function handle(event) {
       return jsonResponse(503, {
         error: "O catalogo esta temporariamente em manutencao. Tenta novamente mais tarde.",
       });
-    }
-
-    const cachedResponse = getCachedPublicCatalogResponse(id);
-    if (cachedResponse) {
-      if (requestAcceptsEtag(event, cachedResponse.headers?.ETag)) {
-        return buildNotModifiedResponse(cachedResponse);
-      }
-
-      return cachedResponse;
     }
 
     const stores = await pool.query(
@@ -83,13 +75,29 @@ async function handle(event) {
       });
     }
 
+    const cachedResponse = getCachedPublicCatalogResponse(id);
+    if (cachedResponse) {
+      if (requestAcceptsEtag(event, cachedResponse.headers?.ETag)) {
+        return buildNotModifiedResponse(cachedResponse);
+      }
+
+      return cachedResponse;
+    }
+
     if (storeRow.public_snapshot_response_body) {
       try {
         const snapshotPayload = hydratePublicCatalogSnapshotBody(
           storeRow.public_snapshot_response_body,
           systemSettings.supportWhatsApp,
         );
-        if (snapshotPayload) {
+        if (
+          snapshotPayload
+          && snapshotPayload.store
+          && Object.prototype.hasOwnProperty.call(snapshotPayload.store, "reviewSummary")
+          && Object.prototype.hasOwnProperty.call(snapshotPayload.store, "testimonials")
+          && Object.prototype.hasOwnProperty.call(snapshotPayload.store, "featuredTestimonials")
+          && Object.prototype.hasOwnProperty.call(snapshotPayload.store, "recentTestimonials")
+        ) {
           const response = buildPublicCatalogResponse(snapshotPayload);
           setCachedPublicCatalogResponse(id, response);
 
@@ -114,17 +122,18 @@ async function handle(event) {
 
     const mappedStore = mapStore(storeRow);
     const mappedProducts = products.rows.map(mapProduct);
+    const enrichedStore = await attachPublicStoreReviews(pool, mappedStore, id);
 
     await upsertPublicCatalogSnapshot(pool, {
       id,
-      store: mappedStore,
+      store: enrichedStore,
       products: mappedProducts,
     });
 
     const response = buildPublicCatalogResponse({
       id,
       store: {
-        ...mappedStore,
+        ...enrichedStore,
         supportWhatsApp: systemSettings.supportWhatsApp,
       },
       products: mappedProducts,

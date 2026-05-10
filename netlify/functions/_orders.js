@@ -470,6 +470,10 @@ function mapOrder(row, options = {}) {
     order.customer = options.customer;
   }
 
+  if (options.review) {
+    order.review = options.review;
+  }
+
   return order;
 }
 

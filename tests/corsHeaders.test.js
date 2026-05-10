@@ -19,7 +19,7 @@ export async function runCorsHeadersTests() {
 
   try {
     process.env.CORS_ALLOWED_ORIGINS =
-      "capacitor://localhost,http://localhost,https://*.catalogofernagest.com";
+      "capacitor://localhost,http://localhost,https://*.kastrozapp.shop";
 
     const wrappedGet = withCors(
       async () => jsonResponse(200, { ok: true }),
@@ -33,11 +33,11 @@ export async function runCorsHeadersTests() {
     assert.match(String(allowedResponse.headers.Vary || ""), /Origin/);
 
     const wildcardResponse = await wrappedGet(
-      createEvent("GET", "https://loja-1.catalogofernagest.com"),
+      createEvent("GET", "https://loja-1.kastrozapp.shop"),
     );
     assert.equal(
       wildcardResponse.headers["Access-Control-Allow-Origin"],
-      "https://loja-1.catalogofernagest.com",
+      "https://loja-1.kastrozapp.shop",
     );
 
     const preflightResponse = await wrappedGet(

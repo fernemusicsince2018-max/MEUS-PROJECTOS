@@ -19,7 +19,7 @@ async function main() {
 
   const row = result.rows[0];
 
-  console.log("Ligacao PostgreSQL OK.");
+  console.log("Ligacao com a base de dados OK.");
   console.log(`Database: ${row.database_name}`);
   console.log(`User: ${row.database_user}`);
   console.log(`Tabela users: ${row.users_table || "nao encontrada"}`);
@@ -31,7 +31,7 @@ async function main() {
 
 main()
   .catch((error) => {
-    console.error("Falha ao validar a ligacao PostgreSQL.");
+    console.error("Falha ao validar a ligacao com a base de dados.");
     console.error(error.message || error);
     process.exitCode = 1;
   })

@@ -13,7 +13,7 @@ export default function CartDrawer({ store, cart, total, color, orderMeta, setOr
   const hasWhatsApp = Boolean(store.whatsapp?.replace(/\D/g, ""));
   const canonicalCountry = getCanonicalCountry(store.country);
   const regionOptions = getCountryRegions(canonicalCountry);
-  const regionLabel = regionOptions.length > 0 ? getCountryRegionLabel(canonicalCountry) : "Provincia / Estado / Regiao";
+  const regionLabel = regionOptions.length > 0 ? getCountryRegionLabel(canonicalCountry) : "Província / Estado / Região";
   const areaSuggestions = canonicalCountry === "Angola" ? getAreaSuggestionsByProvince(orderMeta.province) : [];
   const orderValidationError = getOrderValidationError(orderMeta, regionLabel);
   const checkoutDisabled = checkoutBusy || !hasWhatsApp || cart.length === 0 || Boolean(orderValidationError);
@@ -22,8 +22,8 @@ export default function CartDrawer({ store, cart, total, color, orderMeta, setOr
   const normalizedRegionLabel = regionLabel.toLowerCase();
   const areaHint = orderMeta.province
     ? canSuggestAreas
-      ? "Podes escolher uma sugestao ou escrever a area exata."
-      : "Escreve o municipio, bairro ou area exata."
+      ? "Podes escolher uma sugestão ou escrever a área exata."
+      : "Escreve o município, bairro ou área exata."
     : `Seleciona primeiro ${normalizedRegionLabel}.`;
 
   return (
@@ -84,7 +84,7 @@ export default function CartDrawer({ store, cart, total, color, orderMeta, setOr
                   <PreviewLine label="Telefone" value={orderMeta.customerPhone || "Sem telefone"} />
                   <PreviewLine label="Recebimento" value={FULFILLMENT_OPTIONS.find((option) => option.value === orderMeta.fulfillmentType)?.label || "Por definir"} />
                   <PreviewLine label={regionLabel} value={orderMeta.province || "Por definir"} />
-                  <PreviewLine label="Area" value={orderMeta.area || "Por definir"} />
+                  <PreviewLine label="Área" value={orderMeta.area || "Por definir"} />
                   {orderValidationError ? (
                     <div style={{ color: "#b91c1c", fontWeight: "700" }}>
                       Ainda falta: {orderValidationError}
@@ -105,13 +105,13 @@ export default function CartDrawer({ store, cart, total, color, orderMeta, setOr
                 <input data-testid="checkout-customer-name" value={orderMeta.customerName} onChange={(event) => setOrderMeta({ ...orderMeta, customerName: event.target.value })} placeholder="Como te devemos identificar?" style={FIELD_STYLE} />
               </FLabel>
 
-              <FLabel label="Telefone / WhatsApp do cliente" hint="Usado para reconhecer clientes recorrentes e aplicar descontos fidelidade.">
+              <FLabel label="Telefone / WhatsApp do cliente" hint="Usado para reconhecer clientes recorrentes e aplicar descontos de fidelidade.">
                 <input
                   type="tel"
                   data-testid="checkout-customer-phone"
                   value={orderMeta.customerPhone}
                   onChange={(event) => setOrderMeta({ ...orderMeta, customerPhone: event.target.value })}
-                  placeholder="Ex: 244923000000"
+                  placeholder="Ex.: 244923000000."
                   style={FIELD_STYLE}
                 />
               </FLabel>
@@ -171,20 +171,20 @@ export default function CartDrawer({ store, cart, total, color, orderMeta, setOr
                           province: event.target.value,
                         })
                       }
-                      placeholder="Ex: Luanda, Sao Paulo, Lisboa..."
+                      placeholder="Ex.: Luanda, Sao Paulo ou Lisboa."
                       style={FIELD_STYLE}
                     />
                   )}
                 </FLabel>
 
-                <FLabel label="Area / municipio / bairro" hint={areaHint}>
+                <FLabel label="Área / município / bairro" hint={areaHint}>
                   <div>
                     <input
                       data-testid="checkout-area"
                       list={canSuggestAreas ? "country-area-suggestions" : undefined}
                       value={orderMeta.area}
                       onChange={(event) => setOrderMeta({ ...orderMeta, area: event.target.value })}
-                      placeholder="Ex: Maianga, Catete, Lobito..."
+                      placeholder="Ex.: Maianga, Catete ou Lobito."
                       style={FIELD_STYLE}
                     />
                     {canSuggestAreas && (
@@ -225,7 +225,7 @@ export default function CartDrawer({ store, cart, total, color, orderMeta, setOr
               )}
 
               <FLabel label="Observacoes do pedido">
-                <textarea value={orderMeta.notes} onChange={(event) => setOrderMeta({ ...orderMeta, notes: event.target.value })} placeholder="Ex: entregar depois das 18h" rows={3} style={TEXTAREA_STYLE} />
+                <textarea value={orderMeta.notes} onChange={(event) => setOrderMeta({ ...orderMeta, notes: event.target.value })} placeholder="Ex.: entregar depois das 18h." rows={3} style={TEXTAREA_STYLE} />
               </FLabel>
             </CollapsiblePanel>
           </div>
@@ -242,7 +242,7 @@ export default function CartDrawer({ store, cart, total, color, orderMeta, setOr
           </button>
 
           {hasWhatsApp && orderValidationError && <div style={{ fontSize: "12px", color: "#dc2626", textAlign: "center", marginTop: "8px" }}>{orderValidationError}</div>}
-          {!store.whatsapp && <div style={{ fontSize: "12px", color: "#dc2626", textAlign: "center", marginTop: "8px" }}>Configura o numero de WhatsApp no painel admin.</div>}
+          {!store.whatsapp && <div style={{ fontSize: "12px", color: "#dc2626", textAlign: "center", marginTop: "8px" }}>Configura o número de WhatsApp no painel admin.</div>}
         </div>
       </div>
     </div>

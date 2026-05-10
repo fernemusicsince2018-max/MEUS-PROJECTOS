@@ -1,12 +1,13 @@
 import React from "react";
-import { Clock3, Package, RefreshCw, TrendingUp } from "lucide-react";
+import { Check, Clock3, Copy, MessageCircleMore, Package, RefreshCw, Star, TrendingUp } from "lucide-react";
 import { SURFACE_STYLE } from "../../constants.js";
 import { fmtMoney } from "../../utils/format.js";
 import {
+  buildOrderTrackingUrl,
   buildOrderStatusDurationMap,
-  formatOrderDateTime,
   formatCustomerDiscountPercent,
   formatCustomerOrderCount,
+  formatOrderDateTime,
   getFulfillmentLabel,
   getOrderCurrentStatusTiming,
   getOrderRegionLabel,
@@ -46,6 +47,33 @@ const TIMING_VARIANT_STYLE = {
   upcoming: { background: "#fff7ed", color: "#9a3412", borderColor: "#fed7aa" },
   idle: { background: "var(--color-background-secondary)", color: "var(--color-text-secondary)", borderColor: "var(--color-border-tertiary)" },
 };
+
+function buildWhatsAppHref(rawPhone, message) {
+  const phone = String(rawPhone || "").replace(/\D/g, "");
+  if (!phone) return "";
+
+  const normalizedMessage = String(message || "").trim();
+  return normalizedMessage
+    ? `https://wa.me/${phone}?text=${encodeURIComponent(normalizedMessage)}`
+    : `https://wa.me/${phone}`;
+}
+
+function buildReviewRequestMessage(order, storeName, trackingUrl) {
+  const safeTrackingCode = String(order?.trackingCode || "").trim();
+  const safeStoreName = String(storeName || "a loja").trim() || "a loja";
+  const safeTrackingUrl = String(trackingUrl || "").trim();
+
+  return [
+    "Olá!",
+    safeTrackingCode
+      ? `A tua encomenda ${safeTrackingCode} na ${safeStoreName} já foi concluída.`
+      : `A tua encomenda na ${safeStoreName} já foi concluída.`,
+    "Quando puderes, abre este link para acompanhar o pedido e deixar a tua avaliação da loja:",
+    safeTrackingUrl,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
 
 function createCalendarDayKey(value) {
   const date = new Date(value);
@@ -102,7 +130,7 @@ function MiniRevenueChart({ points = [], currencyCode = "AOA", color = "#16a34a"
         </div>
       ) : (
         <div style={{ padding: "18px", borderRadius: "18px", background: "var(--color-background-secondary)", color: "var(--color-text-secondary)", fontSize: "13px" }}>
-          Ainda nao existem pedidos suficientes para desenhar o grafico.
+          Ainda não existem pedidos suficientes para desenhar o gráfico.
         </div>
       )}
     </div>
@@ -195,13 +223,22 @@ export default function OrdersTab({
 }) {
   const [timerDrafts, setTimerDrafts] = React.useState({});
   const [customerDiscountDrafts, setCustomerDiscountDrafts] = React.useState({});
+  const [copiedReviewLinkOrderId, setCopiedReviewLinkOrderId] = React.useState("");
   const [now, setNow] = React.useState(() => Date.now());
+  const reviewCopyTimeoutRef = React.useRef(0);
   const regionLabel = getOrderRegionLabel(store?.country);
 
   React.useEffect(() => {
     const intervalId = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(intervalId);
   }, []);
+
+  React.useEffect(() => () => {
+    if (reviewCopyTimeoutRef.current) {
+      window.clearTimeout(reviewCopyTimeoutRef.current);
+    }
+  }, []);
+
   const currentDayKey = React.useMemo(() => createCalendarDayKey(now), [now]);
 
   React.useEffect(() => {
@@ -305,6 +342,44 @@ export default function OrdersTab({
     }));
   }
 
+  async function handleCopyReviewLink(order) {
+    const trackingUrl = buildOrderTrackingUrl(order?.trackingToken || "");
+    if (!trackingUrl || typeof navigator === "undefined" || !navigator?.clipboard?.writeText) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(trackingUrl);
+      setCopiedReviewLinkOrderId(order?.id || "");
+
+      if (reviewCopyTimeoutRef.current) {
+        window.clearTimeout(reviewCopyTimeoutRef.current);
+      }
+
+      reviewCopyTimeoutRef.current = window.setTimeout(() => {
+        setCopiedReviewLinkOrderId("");
+      }, 1800);
+    } catch (error) {}
+  }
+
+  function handleOpenReviewWhatsApp(order) {
+    const trackingUrl = buildOrderTrackingUrl(order?.trackingToken || "");
+    if (!trackingUrl) {
+      return;
+    }
+
+    const whatsappHref = buildWhatsAppHref(
+      order?.customerPhone,
+      buildReviewRequestMessage(order, store?.name, trackingUrl),
+    );
+
+    if (!whatsappHref || typeof window === "undefined") {
+      return;
+    }
+
+    window.open(whatsappHref, "_blank", "noopener,noreferrer");
+  }
+
   function renderOrderCard(order) {
     const statusMeta = getOrderStatusMeta(order.status);
     const location = [order.area, order.region].filter(Boolean).join(", ");
@@ -318,6 +393,16 @@ export default function OrdersTab({
     const customerOrderCount = Math.max(0, Number(customerProfile?.orderCount || 0));
     const customerDiscountValue = getCustomerDiscountDraft(customerKey, customerProfile?.loyaltyDiscountPercent ?? 0);
     const isSavingCustomer = busyCustomerKey === customerKey || busyCustomerKey === order.id;
+    const isDelivered = order.status === "delivered";
+    const reviewTrackingUrl = isDelivered ? buildOrderTrackingUrl(order.trackingToken) : "";
+    const reviewWhatsappHref = isDelivered && reviewTrackingUrl
+      ? buildWhatsAppHref(
+          customerPhone,
+          buildReviewRequestMessage(order, store?.name, reviewTrackingUrl),
+        )
+      : "";
+    const hasStoredReview = Number(order?.review?.rating || 0) > 0;
+    const reviewLinkCopied = copiedReviewLinkOrderId === order.id;
 
     return (
       <div key={order.id} style={{ ...SURFACE_STYLE, padding: "18px", display: "grid", gap: "16px" }}>
@@ -380,8 +465,8 @@ export default function OrdersTab({
           <div style={{ padding: "14px", borderRadius: "18px", background: "var(--color-background-secondary)" }}>
             <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-text-secondary)", marginBottom: "8px" }}>Entrega</div>
             <div style={{ fontSize: "13px", fontWeight: "700" }}>{getFulfillmentLabel(order.fulfillmentType)}</div>
-            <div style={{ marginTop: "6px", fontSize: "12px", color: "var(--color-text-secondary)" }}>{regionLabel}: {order.region || "Nao definido"}</div>
-            <div style={{ marginTop: "4px", fontSize: "12px", color: "var(--color-text-secondary)" }}>Area: {location || "Nao definida"}</div>
+            <div style={{ marginTop: "6px", fontSize: "12px", color: "var(--color-text-secondary)" }}>{regionLabel}: {order.region || "Não definido"}</div>
+            <div style={{ marginTop: "4px", fontSize: "12px", color: "var(--color-text-secondary)" }}>Área: {location || "Não definida"}</div>
             {order.pickupTime ? <div style={{ marginTop: "4px", fontSize: "12px", color: "var(--color-text-secondary)" }}>Retirada: {order.pickupTime}</div> : null}
             {order.deliveryTime ? <div style={{ marginTop: "4px", fontSize: "12px", color: "var(--color-text-secondary)" }}>Entrega: {order.deliveryTime}</div> : null}
           </div>
@@ -459,11 +544,11 @@ export default function OrdersTab({
 
             {order.discountAmount > 0 ? (
               <div style={{ fontSize: "12px", color: "#166534", lineHeight: 1.6 }}>
-                Este pedido ja recebeu {formatCustomerDiscountPercent(order.discountPercent)} de desconto fidelidade.
+                Este pedido já recebeu {formatCustomerDiscountPercent(order.discountPercent)} de desconto de fidelidade.
               </div>
             ) : (
               <div style={{ fontSize: "12px", color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
-                O desconto guardado aqui sera aplicado automaticamente nas proximas compras deste mesmo numero.
+                O desconto guardado aqui será aplicado automaticamente nas próximas compras deste mesmo número.
               </div>
             )}
           </div>
@@ -471,7 +556,76 @@ export default function OrdersTab({
 
         {order.notes ? (
           <div style={{ padding: "13px 14px", borderRadius: "18px", background: "rgba(12,37,34,0.04)", color: "var(--color-text-secondary)", fontSize: "13px", lineHeight: 1.7 }}>
-            <strong style={{ color: "var(--color-text-primary)" }}>Observacoes:</strong> {order.notes}
+            <strong style={{ color: "var(--color-text-primary)" }}>Observações:</strong> {order.notes}
+          </div>
+        ) : null}
+
+        {isDelivered ? (
+          <div style={{ padding: "14px 16px", borderRadius: "20px", border: "1px solid #fcd34d", background: "#fffbeb", display: "grid", gap: "12px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
+              <div style={{ display: "grid", gap: "6px" }}>
+                <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "13px", fontWeight: "800", color: "#92400e" }}>
+                  <Star size={14} /> Pedido pronto para avaliação
+                </div>
+                <div style={{ fontSize: "12px", color: "#92400e", lineHeight: 1.7 }}>
+                  {hasStoredReview
+                    ? "Este pedido já recebeu uma avaliação do cliente. Ainda assim, podes reenviar o mesmo link se ele quiser atualizar o comentário."
+                    : "Pede ao cliente para abrir este link depois da entrega e deixar a avaliação da loja neste mesmo pedido."}
+                </div>
+              </div>
+              {hasStoredReview ? (
+                <Badge bg="#dcfce7" color="#166534">
+                  {order.review.rating} estrela{order.review.rating === 1 ? "" : "s"}
+                </Badge>
+              ) : null}
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px" }}>
+              <button
+                type="button"
+                onClick={() => handleCopyReviewLink(order)}
+                disabled={!reviewTrackingUrl}
+                style={{
+                  ...STATUS_BUTTON_STYLE,
+                  background: reviewLinkCopied ? "#dcfce7" : "white",
+                  color: reviewLinkCopied ? "#166534" : "#92400e",
+                  borderColor: reviewLinkCopied ? "#bbf7d0" : "#fcd34d",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                  cursor: reviewTrackingUrl ? "pointer" : "not-allowed",
+                  opacity: reviewTrackingUrl ? 1 : 0.6,
+                }}
+              >
+                {reviewLinkCopied ? <Check size={14} /> : <Copy size={14} />}
+                {reviewLinkCopied ? "Link copiado" : "Copiar link de avaliação"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleOpenReviewWhatsApp(order)}
+                disabled={!reviewWhatsappHref}
+                style={{
+                  ...STATUS_BUTTON_STYLE,
+                  background: "#25D366",
+                  color: "white",
+                  borderColor: "#25D366",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                  cursor: reviewWhatsappHref ? "pointer" : "not-allowed",
+                  opacity: reviewWhatsappHref ? 1 : 0.6,
+                }}
+              >
+                <MessageCircleMore size={14} /> Pedir avaliação no WhatsApp
+              </button>
+            </div>
+
+            <div style={{ fontSize: "11px", color: "#92400e", lineHeight: 1.6, wordBreak: "break-word" }}>
+              Link do cliente: {reviewTrackingUrl || "Link indisponível para este pedido."}
+            </div>
           </div>
         ) : null}
 
@@ -500,7 +654,7 @@ export default function OrdersTab({
 
           <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
             <div style={{ fontSize: "11px", color: "var(--color-text-secondary)" }}>
-              Ultima atualizacao: {formatOrderDateTime(order.statusUpdatedAt)}
+              Última atualização: {formatOrderDateTime(order.statusUpdatedAt)}
             </div>
             <button
               type="button"
@@ -565,13 +719,13 @@ export default function OrdersTab({
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "12px" }}>
         <StatTile label="Total" value={summary?.totalCount ?? orders.length} hint="encomendas" color={color} />
         <StatTile label="Pendente" value={statusCounts.pending} hint="por iniciar" color={color} />
-        <StatTile label="Em curso" value={statusCounts.inProgress} hint="em preparacao" color={color} />
+        <StatTile label="Em curso" value={statusCounts.inProgress} hint="em preparação" color={color} />
         <StatTile label="A caminho" value={statusCounts.onTheWay} hint="em entrega" color={color} />
         <StatTile label="Entregue" value={statusCounts.delivered} hint="concluidas" color={color} />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
-        <StatTile label="Pedidos de hoje" value={todaySummary.count} hint="mantem as concluidas aqui" color={color} />
+        <StatTile label="Pedidos de hoje" value={todaySummary.count} hint="mantém as concluídas aqui" color={color} />
         <StatTile label="Receita de hoje" value={fmtMoney(todaySummary.revenue, store?.currencyCode || "AOA")} hint="volume dos pedidos do dia" color={color} />
         <StatTile label="Concluidos hoje" value={todaySummary.deliveredCount} hint="entregues no dia atual" color={color} />
         <StatTile label="Crescimento 7 dias" value={formatGrowthLabel(growth)} hint="comparado aos 7 dias anteriores" color={color} />
@@ -582,7 +736,7 @@ export default function OrdersTab({
       {orders.length === 0 ? (
         <div style={{ ...SURFACE_STYLE, padding: "32px 24px", textAlign: "center", color: "var(--color-text-secondary)" }}>
           <Package size={34} style={{ marginBottom: "10px", opacity: 0.35 }} />
-          <div style={{ fontSize: "16px", fontWeight: "700", color: "var(--color-text-primary)" }}>Ainda nao existem encomendas</div>
+          <div style={{ fontSize: "16px", fontWeight: "700", color: "var(--color-text-primary)" }}>Ainda não existem encomendas</div>
           <div style={{ marginTop: "6px", fontSize: "13px", lineHeight: 1.7 }}>
             Quando um cliente finalizar um pedido, ele aparece aqui com o estado inicial pendente.
           </div>
@@ -591,19 +745,19 @@ export default function OrdersTab({
         <>
           {renderOrderSection(
             "Pedidos de hoje",
-            "Todos os pedidos criados hoje continuam aqui, incluindo os que ja foram concluidos.",
+            "Todos os pedidos criados hoje continuam aqui, incluindo os que já foram concluídos.",
             todayOrders,
           )}
           {renderOrderSection(
-            "Historico recente",
+            "Histórico recente",
             "Pedidos de dias anteriores para consulta e acompanhamento.",
             historicalOrders,
           )}
           <div style={{ ...SURFACE_STYLE, padding: "18px", display: "grid", gap: "10px", justifyItems: "center", textAlign: "center" }}>
             <div style={{ fontSize: "12px", color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
               {pageInfo?.hasMore
-                ? `Ja carregamos ${loadedOrdersCount} de ${totalOrdersCount} pedidos.`
-                : `Todos os ${loadedOrdersCount} pedido(s) disponiveis nesta conta ja foram carregados.`}
+                ? `Já carregámos ${loadedOrdersCount} de ${totalOrdersCount} pedidos.`
+                : `Todos os ${loadedOrdersCount} pedido(s) disponíveis nesta conta já foram carregados.`}
             </div>
             {pageInfo?.hasMore ? (
               <button

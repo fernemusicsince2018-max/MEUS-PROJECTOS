@@ -21,10 +21,6 @@ export function fmtMoney(value, currencyCode = "AOA") {
   return `${symbol} ${groupedInteger}${decimal}${decimalPart}`;
 }
 
-export function fmtR(value) {
-  return fmtMoney(value, "BRL");
-}
-
 export function parseMoney(value) {
   if (value === "" || value == null) return 0;
 

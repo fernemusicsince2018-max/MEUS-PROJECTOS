@@ -1,8 +1,13 @@
 import { getSessionContext } from "./_auth.js";
+import {
+  getMerchantOrderMetricsWindow,
+  listOrderMetricBuckets,
+} from "./_order-metrics.js";
 import { getOrderStats } from "./_order-stats.js";
 import { mapCustomerProfileRow, mapOrder, mapOrderItem } from "./_orders.js";
 import { ensureDatabaseReady, getPool, jsonResponse, withCors } from "./_postgres.js";
-import { buildMerchantOrderSummary } from "../../shared/orderAnalytics.js";
+import { getStoreReviewOverview, listStoreReviewsByOrderIds } from "./_store-reviews.js";
+import { buildMerchantOrderSummaryFromMetricsBuckets } from "../../shared/orderAnalytics.js";
 import {
   buildEmptyMerchantOrdersPageInfo,
   buildMerchantOrdersPage,
@@ -11,7 +16,6 @@ import {
 } from "../../shared/merchantOrdersPagination.js";
 
 const SUMMARY_WINDOW_DAYS = 7;
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 function addParam(values, value) {
   values.push(value);
@@ -24,21 +28,6 @@ function normalizeTimezoneOffsetMinutes(value) {
   return Math.min(14 * 60, Math.max(-14 * 60, Math.round(numeric)));
 }
 
-function shiftTimestampToLocalSpace(timestamp, timezoneOffsetMinutes) {
-  return timestamp - timezoneOffsetMinutes * 60 * 1000;
-}
-
-function startOfLocalDayTimestamp(reference, timezoneOffsetMinutes) {
-  const date = reference instanceof Date ? reference : new Date(reference);
-  if (Number.isNaN(date.getTime())) return Number.NaN;
-
-  const shiftedDate = new Date(
-    shiftTimestampToLocalSpace(date.getTime(), timezoneOffsetMinutes),
-  );
-  shiftedDate.setUTCHours(0, 0, 0, 0);
-  return shiftedDate.getTime() + timezoneOffsetMinutes * 60 * 1000;
-}
-
 function appendCursorFilter(values, cursor) {
   const parsed = decodeMerchantOrdersCursor(cursor);
   if (!parsed?.createdAt || !parsed?.id) return "";
@@ -49,45 +38,31 @@ function appendCursorFilter(values, cursor) {
 }
 
 async function fetchMerchantOrdersSummary(pool, storeId, timezoneOffsetMinutes, referenceNow = new Date()) {
-  const currentDayStart = startOfLocalDayTimestamp(referenceNow, timezoneOffsetMinutes);
-  const previousWindowStart = currentDayStart - (SUMMARY_WINDOW_DAYS * 2 - 1) * DAY_MS;
-  const recentWindowStartIso = new Date(previousWindowStart).toISOString();
+  const metricsWindow = getMerchantOrderMetricsWindow({
+    referenceNow,
+    timezoneOffsetMinutes,
+    windowDays: SUMMARY_WINDOW_DAYS,
+  });
 
-  const [orderStats, recentOrdersResult] = await Promise.all([
+  const [orderStats, metricBuckets] = await Promise.all([
     getOrderStats(pool, storeId),
-    pool.query(
-      `select status, total_amount, created_at
-         from catalog_orders
-        where store_id = $1
-          and created_at >= $2::timestamptz
-        order by created_at desc`,
-      [storeId, recentWindowStartIso],
-    ),
+    listOrderMetricBuckets(pool, {
+      storeId,
+      startAt: metricsWindow.startAt,
+      endAt: metricsWindow.endAt,
+    }),
   ]);
 
-  const recentSummary = buildMerchantOrderSummary(
-    recentOrdersResult.rows.map((row) => ({
-      status: row.status,
-      totalAmount: Number(row.total_amount || 0),
-      createdAt: row.created_at,
-    })),
+  return buildMerchantOrderSummaryFromMetricsBuckets(
+    metricBuckets,
     {
       timezoneOffsetMinutes,
       referenceNow,
       windowDays: SUMMARY_WINDOW_DAYS,
+      totalCount: orderStats.totalCount,
+      statusCounts: orderStats.statusCounts,
     },
   );
-
-  const totalCount = Number(orderStats.totalCount || 0);
-
-  return {
-    ...recentSummary,
-    totalCount,
-    statusCounts: orderStats.statusCounts,
-    historical: {
-      count: Math.max(0, totalCount - Number(recentSummary?.today?.count || 0)),
-    },
-  };
 }
 
 async function handle(event) {
@@ -108,7 +83,7 @@ async function handle(event) {
     const cursorFilter = appendCursorFilter(listValues, event.queryStringParameters?.cursor);
     const limitPlaceholder = addParam(listValues, limit + 1);
 
-    const [ordersResult, summary] = await Promise.all([
+    const [ordersResult, summary, reviewsOverview] = await Promise.all([
       pool.query(
         `select
            orders.*,
@@ -133,6 +108,7 @@ async function handle(event) {
         listValues,
       ),
       fetchMerchantOrdersSummary(pool, session.storeId, timezoneOffsetMinutes, referenceNow),
+      getStoreReviewOverview(pool, session.storeId, { publicOnly: true }),
     ]);
 
     const page = buildMerchantOrdersPage(
@@ -143,24 +119,27 @@ async function handle(event) {
     const visibleRows = page.rows;
     const pageInfo = page.pageInfo || buildEmptyMerchantOrdersPageInfo(limit);
     const orderIds = visibleRows.map((order) => order.id);
-    const itemsResult = orderIds.length
-      ? await pool.query(
-        `select
-           id,
-           order_id,
-           product_id,
-           product_name,
-           product_image,
-           unit_price,
-           quantity,
-           line_total,
-           created_at
-          from catalog_order_items
-         where order_id = any($1::text[])
-         order by created_at asc`,
-        [orderIds],
-      )
-      : { rows: [] };
+    const [itemsResult, reviews] = orderIds.length
+      ? await Promise.all([
+        pool.query(
+          `select
+             id,
+             order_id,
+             product_id,
+             product_name,
+             product_image,
+             unit_price,
+             quantity,
+             line_total,
+             created_at
+            from catalog_order_items
+           where order_id = any($1::text[])
+           order by created_at asc`,
+          [orderIds],
+        ),
+        listStoreReviewsByOrderIds(pool, orderIds),
+      ])
+      : [{ rows: [] }, []];
 
     const itemsByOrderId = itemsResult.rows.reduce((accumulator, row) => {
       const list = accumulator.get(row.order_id) || [];
@@ -168,10 +147,17 @@ async function handle(event) {
       accumulator.set(row.order_id, list);
       return accumulator;
     }, new Map());
+    const reviewsByOrderId = reviews.reduce((accumulator, review) => {
+      if (review?.orderId) {
+        accumulator.set(review.orderId, review);
+      }
+      return accumulator;
+    }, new Map());
     const orders = visibleRows.map((row) =>
       mapOrder(row, {
         items: itemsByOrderId.get(row.id) || [],
         customer: mapCustomerProfileRow(row),
+        review: reviewsByOrderId.get(row.id) || null,
       }),
     );
 
@@ -180,6 +166,7 @@ async function handle(event) {
       orders,
       summary,
       pageInfo,
+      reviewsOverview,
     });
   } catch (error) {
     return jsonResponse(500, { error: error.message || "Erro interno." });

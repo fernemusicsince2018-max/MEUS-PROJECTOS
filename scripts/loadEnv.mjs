@@ -31,7 +31,9 @@ function parseEnvFile(content) {
   return values;
 }
 
-export function loadLocalEnv(mode = "development", cwd = process.cwd()) {
+export function loadLocalEnv(mode = "development", cwd = process.cwd(), options = {}) {
+  const { overwriteProcessEnv = false } = options;
+  const protectedKeys = overwriteProcessEnv ? new Set() : new Set(Object.keys(process.env));
   const files = [
     ".env",
     ".env.local",
@@ -46,9 +48,8 @@ export function loadLocalEnv(mode = "development", cwd = process.cwd()) {
     const parsed = parseEnvFile(fs.readFileSync(fullPath, "utf8"));
 
     for (const [key, value] of Object.entries(parsed)) {
-      if (process.env[key] == null || process.env[key] === "") {
-        process.env[key] = value;
-      }
+      if (protectedKeys.has(key)) continue;
+      process.env[key] = value;
     }
   }
 }

@@ -103,6 +103,16 @@ const MODERN_SCHEMA_STATEMENTS = [
      add column if not exists public_slug varchar(63)`,
   `alter table if exists public.catalog_stores
      add column if not exists custom_domain varchar(255)`,
+  `alter table if exists public.catalog_stores
+     add column if not exists payment_method varchar(80) not null default ''`,
+  `alter table if exists public.catalog_stores
+     add column if not exists payment_bank_name varchar(160) not null default ''`,
+  `alter table if exists public.catalog_stores
+     add column if not exists payment_account_name varchar(160) not null default ''`,
+  `alter table if exists public.catalog_stores
+     add column if not exists payment_account_number varchar(80) not null default ''`,
+  `alter table if exists public.catalog_stores
+     add column if not exists payment_iban varchar(80) not null default ''`,
   `update public.catalog_stores
    set plan_status = 'trial'
    where plan_status is null
@@ -365,12 +375,56 @@ const MODERN_SCHEMA_STATEMENTS = [
        from pg_constraint
        where conname = 'catalog_orders_status_timeline_array_chk'
      ) then
-       alter table public.catalog_orders
-         add constraint catalog_orders_status_timeline_array_chk
-         check (jsonb_typeof(status_timeline) = 'array');
+        alter table public.catalog_orders
+          add constraint catalog_orders_status_timeline_array_chk
+          check (jsonb_typeof(status_timeline) = 'array');
+      end if;
+    end;
+    $$;`,
+  `create table if not exists public.catalog_store_reviews (
+     id text primary key,
+     store_id text not null references public.catalog_stores(id) on delete cascade,
+     order_id text not null references public.catalog_orders(id) on delete cascade,
+     customer_key text not null default '',
+     customer_name varchar(160) not null default '',
+     customer_phone varchar(32) not null default '',
+     rating integer not null default 5,
+     comment text not null default '',
+     is_public boolean not null default true,
+     created_at timestamptz not null default now(),
+     updated_at timestamptz not null default now(),
+     unique (order_id)
+   )`,
+  `do $$
+   begin
+     if not exists (
+       select 1
+       from pg_constraint
+       where conname = 'catalog_store_reviews_order_id_not_blank_chk'
+     ) then
+       alter table public.catalog_store_reviews
+         add constraint catalog_store_reviews_order_id_not_blank_chk
+         check (btrim(order_id) <> '');
      end if;
    end;
    $$;`,
+  `do $$
+   begin
+     if not exists (
+       select 1
+       from pg_constraint
+       where conname = 'catalog_store_reviews_rating_range_chk'
+     ) then
+       alter table public.catalog_store_reviews
+         add constraint catalog_store_reviews_rating_range_chk
+         check (rating >= 1 and rating <= 5);
+     end if;
+   end;
+   $$;`,
+  `create index if not exists idx_catalog_store_reviews_store
+   on public.catalog_store_reviews (store_id, created_at desc)`,
+  `create index if not exists idx_catalog_store_reviews_store_public
+   on public.catalog_store_reviews (store_id, is_public, created_at desc)`,
   `create table if not exists public.catalog_order_stats (
      store_id text primary key references public.catalog_stores(id) on delete cascade,
      total_count integer not null default 0,
@@ -469,6 +523,92 @@ const MODERN_SCHEMA_STATEMENTS = [
      in_progress_count = excluded.in_progress_count,
      on_the_way_count = excluded.on_the_way_count,
      delivered_count = excluded.delivered_count,
+     updated_at = now()`,
+  `create table if not exists public.catalog_order_metrics_hourly (
+     store_id text not null references public.catalog_stores(id) on delete cascade,
+     bucket_hour timestamptz not null,
+     order_count integer not null default 0,
+     revenue_total numeric(12, 2) not null default 0,
+     delivered_count integer not null default 0,
+     delivered_revenue_total numeric(12, 2) not null default 0,
+     created_at timestamptz not null default now(),
+     updated_at timestamptz not null default now(),
+     primary key (store_id, bucket_hour)
+   )`,
+  `do $$
+   begin
+     if not exists (
+       select 1
+       from pg_constraint
+       where conname = 'catalog_order_metrics_hourly_order_count_chk'
+     ) then
+       alter table public.catalog_order_metrics_hourly
+         add constraint catalog_order_metrics_hourly_order_count_chk
+         check (order_count >= 0);
+     end if;
+   end;
+   $$;`,
+  `do $$
+   begin
+     if not exists (
+       select 1
+       from pg_constraint
+       where conname = 'catalog_order_metrics_hourly_revenue_total_chk'
+     ) then
+       alter table public.catalog_order_metrics_hourly
+         add constraint catalog_order_metrics_hourly_revenue_total_chk
+         check (revenue_total >= 0);
+     end if;
+   end;
+   $$;`,
+  `do $$
+   begin
+     if not exists (
+       select 1
+       from pg_constraint
+       where conname = 'catalog_order_metrics_hourly_delivered_count_chk'
+     ) then
+       alter table public.catalog_order_metrics_hourly
+         add constraint catalog_order_metrics_hourly_delivered_count_chk
+         check (delivered_count >= 0);
+     end if;
+   end;
+   $$;`,
+  `do $$
+   begin
+     if not exists (
+       select 1
+       from pg_constraint
+       where conname = 'catalog_order_metrics_hourly_delivered_revenue_total_chk'
+     ) then
+       alter table public.catalog_order_metrics_hourly
+         add constraint catalog_order_metrics_hourly_delivered_revenue_total_chk
+         check (delivered_revenue_total >= 0);
+     end if;
+   end;
+   $$;`,
+  `insert into public.catalog_order_metrics_hourly (
+     store_id,
+     bucket_hour,
+     order_count,
+     revenue_total,
+     delivered_count,
+     delivered_revenue_total
+   )
+   select
+     orders.store_id,
+     date_trunc('hour', orders.created_at) as bucket_hour,
+     count(*)::int as order_count,
+     coalesce(sum(orders.total_amount), 0)::numeric(12, 2) as revenue_total,
+     count(*) filter (where orders.status = 'delivered')::int as delivered_count,
+     coalesce(sum(orders.total_amount) filter (where orders.status = 'delivered'), 0)::numeric(12, 2) as delivered_revenue_total
+   from public.catalog_orders orders
+   group by orders.store_id, date_trunc('hour', orders.created_at)
+   on conflict (store_id, bucket_hour) do update set
+     order_count = excluded.order_count,
+     revenue_total = excluded.revenue_total,
+     delivered_count = excluded.delivered_count,
+     delivered_revenue_total = excluded.delivered_revenue_total,
      updated_at = now()`,
   `create table if not exists public.catalog_notification_jobs (
      id text primary key,
@@ -954,6 +1094,8 @@ const MODERN_SCHEMA_STATEMENTS = [
    on public.catalog_stores (deleted_at)`,
   `create index if not exists idx_catalog_order_stats_updated_at
    on public.catalog_order_stats (updated_at desc)`,
+  `create index if not exists idx_catalog_order_metrics_hourly_store_bucket
+   on public.catalog_order_metrics_hourly (store_id, bucket_hour desc)`,
   `create index if not exists idx_catalog_notification_jobs_claim
    on public.catalog_notification_jobs (type, status, available_at asc, created_at asc)`,
   `create index if not exists idx_catalog_notification_jobs_processing
@@ -966,11 +1108,21 @@ const MODERN_SCHEMA_STATEMENTS = [
    begin
      new.updated_at = now();
      return new;
-   end;
-   $$;`,
+    end;
+    $$;`,
+  `drop trigger if exists trg_catalog_store_reviews_updated_at on public.catalog_store_reviews`,
+  `create trigger trg_catalog_store_reviews_updated_at
+   before update on public.catalog_store_reviews
+   for each row
+   execute function public.set_catalog_updated_at()`,
   `drop trigger if exists trg_catalog_order_stats_updated_at on public.catalog_order_stats`,
   `create trigger trg_catalog_order_stats_updated_at
    before update on public.catalog_order_stats
+   for each row
+   execute function public.set_catalog_updated_at()`,
+  `drop trigger if exists trg_catalog_order_metrics_hourly_updated_at on public.catalog_order_metrics_hourly`,
+  `create trigger trg_catalog_order_metrics_hourly_updated_at
+   before update on public.catalog_order_metrics_hourly
    for each row
    execute function public.set_catalog_updated_at()`,
   `drop trigger if exists trg_catalog_notification_jobs_updated_at on public.catalog_notification_jobs`,

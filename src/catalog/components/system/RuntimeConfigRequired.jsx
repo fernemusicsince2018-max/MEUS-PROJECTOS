@@ -1,4 +1,4 @@
-export default function RuntimeConfigRequired({ title = "Configuracao obrigatoria", message = "" }) {
+export default function RuntimeConfigRequired({ title = "Configuração obrigatória", message = "" }) {
   return (
     <div
       style={{
@@ -23,11 +23,11 @@ export default function RuntimeConfigRequired({ title = "Configuracao obrigatori
         }}
       >
         <div style={{ fontSize: "12px", fontWeight: "800", letterSpacing: "0.08em", textTransform: "uppercase", color: "#b45309" }}>
-          API obrigatoria
+          API obrigatória
         </div>
         <div style={{ fontSize: "28px", lineHeight: 1.08, fontWeight: "800", color: "#0f172a" }}>{title}</div>
         <div style={{ fontSize: "14px", lineHeight: 1.7, color: "#475569" }}>
-          {message || "Esta instalacao precisa da API configurada para autenticar, gravar catalogos, pedidos e dados da base de dados com seguranca."}
+          {message || "Esta instalação precisa da API configurada para autenticar, gravar catálogos, pedidos e dados da base de dados com segurança."}
         </div>
         <div
           style={{
@@ -39,7 +39,7 @@ export default function RuntimeConfigRequired({ title = "Configuracao obrigatori
             fontWeight: "700",
           }}
         >
-          Define `VITE_CATALOG_API_BASE=/api` para web e uma URL absoluta em `VITE_NATIVE_CATALOG_API_BASE` para o app movel antes de publicar.
+          Define `VITE_CATALOG_API_BASE=/api` para web e uma URL absoluta em `VITE_NATIVE_CATALOG_API_BASE` para o app móvel antes de publicar.
         </div>
       </div>
     </div>

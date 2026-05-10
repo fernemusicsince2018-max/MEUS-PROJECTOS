@@ -1,5 +1,6 @@
 import { cleanText, mapOrder, mapOrderItem, mapOrderStore } from "./_orders.js";
 import { ensureDatabaseReady, getPool, jsonResponse, withCors } from "./_postgres.js";
+import { getOrderStoreReview } from "./_store-reviews.js";
 
 async function handle(event) {
   try {
@@ -33,28 +34,32 @@ async function handle(event) {
       return jsonResponse(404, { error: "Encomenda nao encontrada." });
     }
 
-    const itemsResult = await pool.query(
-      `select
-         id,
-         order_id,
-         product_id,
-         product_name,
-         product_image,
-         unit_price,
-         quantity,
-         line_total,
-         created_at
-       from catalog_order_items
-       where order_id = $1
-       order by created_at asc`,
-      [orderRow.id],
-    );
+    const [itemsResult, review] = await Promise.all([
+      pool.query(
+        `select
+           id,
+           order_id,
+           product_id,
+           product_name,
+           product_image,
+           unit_price,
+           quantity,
+           line_total,
+           created_at
+         from catalog_order_items
+         where order_id = $1
+         order by created_at asc`,
+        [orderRow.id],
+      ),
+      getOrderStoreReview(pool, orderRow.id),
+    ]);
 
     return jsonResponse(200, {
       ok: true,
       order: mapOrder(orderRow, {
         items: itemsResult.rows.map(mapOrderItem),
         store: mapOrderStore(orderRow),
+        review,
       }),
     });
   } catch (error) {

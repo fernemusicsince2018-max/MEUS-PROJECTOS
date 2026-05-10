@@ -74,10 +74,25 @@ export async function runPasswordResetConfigTests() {
   await withEnv(
     {
       CATALOG_EXPOSE_RESET_CODE: "",
+      LOCAL_FUNCTIONS_PORT: "8888",
       NETLIFY_LOCAL: "true",
       CONTEXT: "dev",
       NODE_ENV: "",
       APP_BASE_URL: "http://localhost:5173",
+    },
+    async () => {
+      assert.equal(shouldExposeResetCode(), true);
+    },
+  );
+
+  await withEnv(
+    {
+      CATALOG_EXPOSE_RESET_CODE: "",
+      LOCAL_FUNCTIONS_PORT: "8888",
+      NETLIFY_LOCAL: "",
+      CONTEXT: "",
+      NODE_ENV: "",
+      APP_BASE_URL: "https://kastrozap.netlify.app",
     },
     async () => {
       assert.equal(shouldExposeResetCode(), true);

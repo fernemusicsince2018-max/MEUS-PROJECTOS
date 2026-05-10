@@ -7,6 +7,7 @@ const globalState = globalThis[GLOBAL_STATE_KEY] || (globalThis[GLOBAL_STATE_KEY
   pool: null,
   databaseReadyPromise: null,
   columnPresenceCache: new Map(),
+  tablePresenceCache: new Map(),
 });
 const responseContextStorage =
   globalThis[RESPONSE_CONTEXT_STATE_KEY] || (globalThis[RESPONSE_CONTEXT_STATE_KEY] = new AsyncLocalStorage());
@@ -25,6 +26,10 @@ if (!("databaseReadyPromise" in globalState)) {
 
 if (!(globalState.columnPresenceCache instanceof Map)) {
   globalState.columnPresenceCache = new Map();
+}
+
+if (!(globalState.tablePresenceCache instanceof Map)) {
+  globalState.tablePresenceCache = new Map();
 }
 
 function normalizeHttpMethod(value, fallback = "") {
@@ -391,6 +396,29 @@ function parseBooleanEnv(value, fallback = false) {
   return fallback;
 }
 
+function isLocalPostgresHost(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized === "127.0.0.1" || normalized === "localhost";
+}
+
+function shouldPreferExplicitLocalPostgresConfig() {
+  const host = process.env.POSTGRES_HOST || process.env.PGHOST;
+  if (!isLocalPostgresHost(host)) {
+    return false;
+  }
+
+  if (String(process.env.LOCAL_FUNCTIONS_PORT || "").trim()) {
+    return true;
+  }
+
+  if (parseBooleanEnv(process.env.NETLIFY_LOCAL, false)) {
+    return true;
+  }
+
+  const nodeEnv = String(process.env.NODE_ENV || "").trim().toLowerCase();
+  return Boolean(nodeEnv) && nodeEnv !== "production";
+}
+
 function shouldUsePooler() {
   return parseBooleanEnv(process.env.POSTGRES_USE_POOLER || process.env.POSTGRES_POOLER, false)
     || Boolean(String(process.env.POSTGRES_POOLER_URL || "").trim());
@@ -404,7 +432,7 @@ function getPostgresConfig() {
     || "";
   const sslEnabled = shouldUseSsl(process.env.POSTGRES_SSL || process.env.PGSSL);
   const ssl = sslEnabled ? { rejectUnauthorized: false } : undefined;
-  const usePooler = shouldUsePooler();
+  const usePooler = shouldUsePooler() && !shouldPreferExplicitLocalPostgresConfig();
   const poolMax = parsePositiveIntegerEnv(
     process.env.POSTGRES_POOL_MAX,
     usePooler ? 3 : 5,
@@ -458,17 +486,28 @@ function getPostgresConfig() {
     baseConfig.application_name = applicationName;
   }
 
+  const host = process.env.POSTGRES_HOST || process.env.PGHOST;
+  const database = process.env.POSTGRES_DATABASE || process.env.PGDATABASE;
+  const user = process.env.POSTGRES_USER || process.env.PGUSER;
+  const password = process.env.POSTGRES_PASSWORD || process.env.PGPASSWORD;
+
+  if (shouldPreferExplicitLocalPostgresConfig() && host && database && user && password) {
+    return {
+      ...baseConfig,
+      host,
+      port: Number(process.env.POSTGRES_PORT || process.env.PGPORT || 5432),
+      database,
+      user,
+      password,
+    };
+  }
+
   if (connectionString) {
     return {
       ...baseConfig,
       connectionString,
     };
   }
-
-  const host = process.env.POSTGRES_HOST || process.env.PGHOST;
-  const database = process.env.POSTGRES_DATABASE || process.env.PGDATABASE;
-  const user = process.env.POSTGRES_USER || process.env.PGUSER;
-  const password = process.env.POSTGRES_PASSWORD || process.env.PGPASSWORD;
 
   if (!host || !database || !user || !password) {
     throw new Error(
@@ -534,6 +573,32 @@ async function hasColumn(queryable, tableName, columnName, schemaName = "public"
   return present;
 }
 
+async function hasTable(queryable, tableName, schemaName = "public", options = {}) {
+  const refresh = Boolean(options && options.refresh);
+  const cacheMissing = Boolean(options && options.cacheMissing);
+  const cacheKey = `${schemaName}.${tableName}`;
+  if (!refresh && globalState.tablePresenceCache.has(cacheKey)) {
+    return globalState.tablePresenceCache.get(cacheKey);
+  }
+
+  const result = await queryable.query(
+    `select 1
+       from information_schema.tables
+      where table_schema = $1
+        and table_name = $2
+      limit 1`,
+    [schemaName, tableName],
+  );
+
+  const present = result.rowCount > 0;
+  if (present || cacheMissing) {
+    globalState.tablePresenceCache.set(cacheKey, present);
+  } else {
+    globalState.tablePresenceCache.delete(cacheKey);
+  }
+  return present;
+}
+
 function mapStore(row, options = {}) {
   const store = {
     name: row.name || "",
@@ -559,6 +624,11 @@ function mapStore(row, options = {}) {
       addressLine: row.address_line || "",
       city: row.city || "",
       country: row.country || "",
+      paymentMethod: row.payment_method || "",
+      paymentBankName: row.payment_bank_name || "",
+      paymentAccountName: row.payment_account_name || "",
+      paymentAccountNumber: row.payment_account_number || "",
+      paymentIban: row.payment_iban || "",
     };
   }
 
@@ -603,6 +673,7 @@ export {
   ensureDatabaseReady,
   getPool,
   hasColumn,
+  hasTable,
   jsonResponse,
   mapProduct,
   mapStore,

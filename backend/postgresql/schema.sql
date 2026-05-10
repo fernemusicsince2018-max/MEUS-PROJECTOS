@@ -140,6 +140,11 @@ create table if not exists public.catalog_stores (
   address_line text,
   city varchar(120),
   country varchar(120),
+  payment_method varchar(80) not null default '',
+  payment_bank_name varchar(160) not null default '',
+  payment_account_name varchar(160) not null default '',
+  payment_account_number varchar(80) not null default '',
+  payment_iban varchar(80) not null default '',
   public_slug varchar(63),
   custom_domain varchar(255),
   plan_id text,
@@ -188,6 +193,21 @@ alter table if exists public.catalog_stores
 
 alter table if exists public.catalog_stores
   add column if not exists country varchar(120);
+
+alter table if exists public.catalog_stores
+  add column if not exists payment_method varchar(80) not null default '';
+
+alter table if exists public.catalog_stores
+  add column if not exists payment_bank_name varchar(160) not null default '';
+
+alter table if exists public.catalog_stores
+  add column if not exists payment_account_name varchar(160) not null default '';
+
+alter table if exists public.catalog_stores
+  add column if not exists payment_account_number varchar(80) not null default '';
+
+alter table if exists public.catalog_stores
+  add column if not exists payment_iban varchar(80) not null default '';
 
 alter table if exists public.catalog_stores
   add column if not exists public_slug varchar(63);
@@ -525,6 +545,30 @@ create unique index if not exists idx_catalog_stores_business_email_unique_activ
   where deleted_at is null
     and business_email is not null
     and btrim(business_email) <> '';
+
+create index if not exists idx_catalog_stores_business_phone_lookup
+  on public.catalog_stores (business_phone)
+  where deleted_at is null
+    and business_phone is not null
+    and btrim(business_phone) <> '';
+
+create index if not exists idx_catalog_stores_whatsapp_lookup
+  on public.catalog_stores (whatsapp)
+  where deleted_at is null
+    and whatsapp is not null
+    and btrim(whatsapp) <> '';
+
+create unique index if not exists idx_catalog_stores_business_phone_unique_active
+  on public.catalog_stores (business_phone)
+  where deleted_at is null
+    and business_phone is not null
+    and btrim(business_phone) <> '';
+
+create unique index if not exists idx_catalog_stores_whatsapp_unique_active
+  on public.catalog_stores (whatsapp)
+  where deleted_at is null
+    and whatsapp is not null
+    and btrim(whatsapp) <> '';
 
 create unique index if not exists idx_catalog_stores_tax_id_unique_active
   on public.catalog_stores ((lower(regexp_replace(tax_id, '[^a-zA-Z0-9]+', '', 'g'))))
@@ -1554,6 +1598,83 @@ $$;
 create index if not exists idx_catalog_order_items_order
   on public.catalog_order_items (order_id, created_at asc);
 
+create table if not exists public.catalog_store_reviews (
+  id text primary key,
+  store_id text not null references public.catalog_stores(id) on delete cascade,
+  order_id text not null references public.catalog_orders(id) on delete cascade,
+  customer_key text not null default '',
+  customer_name varchar(160) not null default '',
+  customer_phone varchar(32) not null default '',
+  rating integer not null default 5,
+  comment text not null default '',
+  is_public boolean not null default true,
+  is_featured boolean not null default false,
+  featured_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (order_id)
+);
+
+alter table if exists public.catalog_store_reviews
+  add column if not exists is_featured boolean;
+
+alter table if exists public.catalog_store_reviews
+  add column if not exists featured_at timestamptz;
+
+update public.catalog_store_reviews
+set is_featured = false
+where is_featured is null;
+
+alter table if exists public.catalog_store_reviews
+  alter column is_featured set default false;
+
+alter table if exists public.catalog_store_reviews
+  alter column is_featured set not null;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'catalog_store_reviews_order_id_not_blank_chk'
+  ) then
+    alter table public.catalog_store_reviews
+      add constraint catalog_store_reviews_order_id_not_blank_chk
+      check (btrim(order_id) <> '');
+  end if;
+end;
+$$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'catalog_store_reviews_rating_range_chk'
+  ) then
+    alter table public.catalog_store_reviews
+      add constraint catalog_store_reviews_rating_range_chk
+      check (rating >= 1 and rating <= 5);
+  end if;
+end;
+$$;
+
+create index if not exists idx_catalog_store_reviews_store
+  on public.catalog_store_reviews (store_id, created_at desc);
+
+create index if not exists idx_catalog_store_reviews_store_public
+  on public.catalog_store_reviews (store_id, is_public, created_at desc);
+
+create index if not exists idx_catalog_store_reviews_store_featured_public
+  on public.catalog_store_reviews (
+    store_id,
+    is_public,
+    is_featured,
+    featured_at desc,
+    updated_at desc,
+    created_at desc
+  );
+
 create table if not exists public.catalog_order_stats (
   store_id text primary key references public.catalog_stores(id) on delete cascade,
   total_count integer not null default 0,
@@ -1660,6 +1781,98 @@ on conflict (store_id) do update set
   delivered_count = excluded.delivered_count,
   updated_at = now();
 
+create table if not exists public.catalog_order_metrics_hourly (
+  store_id text not null references public.catalog_stores(id) on delete cascade,
+  bucket_hour timestamptz not null,
+  order_count integer not null default 0,
+  revenue_total numeric(12, 2) not null default 0,
+  delivered_count integer not null default 0,
+  delivered_revenue_total numeric(12, 2) not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (store_id, bucket_hour)
+);
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'catalog_order_metrics_hourly_order_count_chk'
+  ) then
+    alter table public.catalog_order_metrics_hourly
+      add constraint catalog_order_metrics_hourly_order_count_chk
+      check (order_count >= 0);
+  end if;
+end;
+$$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'catalog_order_metrics_hourly_revenue_total_chk'
+  ) then
+    alter table public.catalog_order_metrics_hourly
+      add constraint catalog_order_metrics_hourly_revenue_total_chk
+      check (revenue_total >= 0);
+  end if;
+end;
+$$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'catalog_order_metrics_hourly_delivered_count_chk'
+  ) then
+    alter table public.catalog_order_metrics_hourly
+      add constraint catalog_order_metrics_hourly_delivered_count_chk
+      check (delivered_count >= 0);
+  end if;
+end;
+$$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'catalog_order_metrics_hourly_delivered_revenue_total_chk'
+  ) then
+    alter table public.catalog_order_metrics_hourly
+      add constraint catalog_order_metrics_hourly_delivered_revenue_total_chk
+      check (delivered_revenue_total >= 0);
+  end if;
+end;
+$$;
+
+insert into public.catalog_order_metrics_hourly (
+  store_id,
+  bucket_hour,
+  order_count,
+  revenue_total,
+  delivered_count,
+  delivered_revenue_total
+)
+select
+  orders.store_id,
+  date_trunc('hour', orders.created_at) as bucket_hour,
+  count(*)::int as order_count,
+  coalesce(sum(orders.total_amount), 0)::numeric(12, 2) as revenue_total,
+  count(*) filter (where orders.status = 'delivered')::int as delivered_count,
+  coalesce(sum(orders.total_amount) filter (where orders.status = 'delivered'), 0)::numeric(12, 2) as delivered_revenue_total
+from public.catalog_orders orders
+group by orders.store_id, date_trunc('hour', orders.created_at)
+on conflict (store_id, bucket_hour) do update set
+  order_count = excluded.order_count,
+  revenue_total = excluded.revenue_total,
+  delivered_count = excluded.delivered_count,
+  delivered_revenue_total = excluded.delivered_revenue_total,
+  updated_at = now();
+
 create table if not exists public.catalog_notification_jobs (
   id text primary key,
   type varchar(64) not null,
@@ -1750,6 +1963,9 @@ $$;
 create index if not exists idx_catalog_order_stats_updated_at
   on public.catalog_order_stats (updated_at desc);
 
+create index if not exists idx_catalog_order_metrics_hourly_store_bucket
+  on public.catalog_order_metrics_hourly (store_id, bucket_hour desc);
+
 create index if not exists idx_catalog_notification_jobs_claim
   on public.catalog_notification_jobs (type, status, available_at asc, created_at asc);
 
@@ -1806,6 +2022,29 @@ create index if not exists idx_catalog_password_reset_tokens_lookup
 create index if not exists idx_catalog_password_reset_tokens_user
   on public.catalog_password_reset_tokens (user_id, expires_at);
 
+create table if not exists public.catalog_pending_store_registrations (
+  id text primary key,
+  email varchar(255) not null,
+  phone varchar(32) not null,
+  full_name varchar(160) not null default '',
+  store_name varchar(160) not null default '',
+  password_hash text not null,
+  code_hash text not null,
+  requested_ip varchar(120),
+  expires_at timestamptz not null,
+  used_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_catalog_pending_store_registrations_email
+  on public.catalog_pending_store_registrations (email, expires_at);
+
+create index if not exists idx_catalog_pending_store_registrations_phone
+  on public.catalog_pending_store_registrations (phone, expires_at);
+
+create index if not exists idx_catalog_pending_store_registrations_lookup
+  on public.catalog_pending_store_registrations (email, code_hash);
+
 create or replace function public.set_catalog_updated_at()
 returns trigger
 language plpgsql
@@ -1846,9 +2085,21 @@ before update on public.catalog_order_customers
 for each row
 execute function public.set_catalog_updated_at();
 
+drop trigger if exists trg_catalog_store_reviews_updated_at on public.catalog_store_reviews;
+create trigger trg_catalog_store_reviews_updated_at
+before update on public.catalog_store_reviews
+for each row
+execute function public.set_catalog_updated_at();
+
 drop trigger if exists trg_catalog_order_stats_updated_at on public.catalog_order_stats;
 create trigger trg_catalog_order_stats_updated_at
 before update on public.catalog_order_stats
+for each row
+execute function public.set_catalog_updated_at();
+
+drop trigger if exists trg_catalog_order_metrics_hourly_updated_at on public.catalog_order_metrics_hourly;
+create trigger trg_catalog_order_metrics_hourly_updated_at
+before update on public.catalog_order_metrics_hourly
 for each row
 execute function public.set_catalog_updated_at();
 
